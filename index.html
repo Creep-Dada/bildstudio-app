@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Bildstudio</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+/* Bildstudio – the same colours as CutForge (near-black stage, red #ff2d55 and turquoise #18e4d6), its own language:
+   CutForge splits light like a lens (RGB shift, glitch); Bildstudio develops pictures – things appear out of a soft
+   blur like an image out of noise, a prism iris turns, headings are set like a gallery catalogue. */
+:root {
+  --bg: #08090b; --bg2: rgba(255,255,255,.045); --bg3: rgba(255,255,255,.085); --solid: #111317; --text: #f4f4f2; --hint: #8a8f98;
+  --line: rgba(255,255,255,.085); --red: #ff2d55; --cyan: #18e4d6; --violet: #a24bff;
+  --red-a: rgba(255,45,85,.26); --cyan-a: rgba(24,228,214,.18); --glow: 0 0 26px rgba(255,45,85,.16), 0 0 26px rgba(24,228,214,.14);
+  --prism: conic-gradient(from var(--turn, 0deg), var(--red), var(--violet), var(--cyan), #ffd36e, var(--red));
+  --radius: 22px; --ease: cubic-bezier(.2, .8, .2, 1); --soft: cubic-bezier(.22, 1, .36, 1);
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  --serif: "Iowan Old Style", "New York", "Palatino Linotype", Palatino, Georgia, serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-tg]) { --bg: #f5f5f2; --bg2: rgba(0,0,0,.035); --bg3: rgba(0,0,0,.065); --solid: #ffffff; --text: #111214; --hint: #6a6f78;
+    --line: rgba(0,0,0,.08); --red: #e8164a; --cyan: #06a196; --red-a: rgba(232,22,74,.14); --cyan-a: rgba(6,161,150,.12); }
+}
+:root[data-light] { --red: #e8164a; --cyan: #06a196; --red-a: rgba(232,22,74,.14); --cyan-a: rgba(6,161,150,.12); }
+@property --turn { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15.5px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; overflow-x: hidden; padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
+
+/* ---------- the stage: a slowly turning prism sun behind frosted dark, and fine grain on top ---------- */
+.sun { position: fixed; z-index: 0; left: 50%; top: -38vh; width: 150vw; max-width: 900px; aspect-ratio: 1; transform: translateX(-50%);
+  border-radius: 50%; background: var(--prism); filter: blur(70px) saturate(1.2); opacity: .30; pointer-events: none;
+  animation: turn 26s linear infinite; }
+:root[data-light] .sun, :root:not([data-tg]) .sun { opacity: .22; }
+@keyframes turn { to { --turn: 360deg; } }
+.grain { position: fixed; inset: -50%; z-index: 0; pointer-events: none; opacity: .07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: grain 1.2s steps(6) infinite; }
+@keyframes grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-4%, 3%); } 40% { transform: translate(3%, -5%); }
+  60% { transform: translate(-6%, -2%); } 80% { transform: translate(5%, 4%); } 100% { transform: translate(0, 0); } }
+.page { position: relative; z-index: 1; max-width: 620px; margin: 0 auto; padding: 18px 18px 10px; }
+
+/* ---------- appearing: out of a blur, like a picture out of noise ---------- */
+.dev { animation: develop .9s var(--soft) backwards; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes develop { from { opacity: 0; filter: blur(14px); transform: scale(.97); } }
+.leave { animation: dissolve .32s var(--ease) forwards; }
+@keyframes dissolve { to { opacity: 0; filter: blur(12px); transform: scale(1.02); } }
+
+/* ---------- header: the iris and the wordmark ---------- */
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.iris { position: relative; width: 34px; height: 34px; border-radius: 50%; background: var(--prism); animation: turn 9s linear infinite;
+  box-shadow: var(--glow); flex: none; }
+.iris::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--bg); transition: inset .6s var(--soft); }
+.iris::after { content: ""; position: absolute; inset: 13px; border-radius: 50%; background: var(--text); opacity: .9; }
+body.busy .iris::before { inset: 4px; }
+.word { font-family: var(--serif); font-size: 25px; letter-spacing: -.01em; line-height: 1; }
+.word b { font-family: var(--sans); font-weight: 800; letter-spacing: -.03em; }
+.tag { margin-left: auto; font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--hint); }
+
+/* ---------- home: the idea ---------- */
+h1 { font-family: var(--serif); font-weight: 400; font-size: 36px; line-height: 1.08; letter-spacing: -.02em; margin: 6px 0 12px; }
+h1 em { font-style: italic; background: var(--prism); -webkit-background-clip: text; background-clip: text; color: transparent; animation: turn 12s linear infinite; }
+.lead { color: var(--hint); margin: 0 0 20px; }
+.canvas { position: relative; border-radius: var(--radius); padding: 1.5px; background: var(--prism); animation: turn 14s linear infinite;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.canvas-in { border-radius: calc(var(--radius) - 1.5px); background: var(--solid); padding: 16px 16px 14px; }
+textarea { width: 100%; min-height: 128px; border: 0; outline: none; resize: none; background: transparent; font-size: 18px; line-height: 1.4; }
+textarea::placeholder, input::placeholder { color: var(--hint); }
+.counter { text-align: right; font-size: 12px; color: var(--hint); }
+.examples { display: flex; gap: 8px; overflow-x: auto; padding: 16px 2px 4px; margin: 0 -18px; padding-left: 18px; scrollbar-width: none; }
+.examples::-webkit-scrollbar { display: none; }
+.examples button { flex: none; border: 1px solid var(--line); background: var(--bg2); border-radius: 999px; padding: 8px 14px; font-size: 13.5px;
+  transition: transform .4s var(--soft), border-color .3s; }
+.examples button:active { transform: scale(.94); }
+.steps { margin-top: 30px; display: grid; gap: 2px; }
+.step { display: flex; gap: 14px; align-items: flex-start; padding: 12px 4px; }
+.step i { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; font-weight: 700;
+  border: 1px solid var(--line); background: var(--bg2); position: relative; }
+.step i::after { content: ""; position: absolute; left: 50%; top: 32px; width: 1px; height: 26px; background: linear-gradient(var(--line), transparent); }
+.step:last-child i::after { display: none; }
+.step b { display: block; font-weight: 650; }
+.step span { color: var(--hint); font-size: 13.5px; }
+
+/* ---------- interview ---------- */
+.progress { position: sticky; top: 0; z-index: 3; height: 3px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin: -6px 0 18px; }
+.progress div { height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--violet), var(--cyan)); transition: width .7s var(--soft);
+  box-shadow: 0 0 12px var(--cyan-a); }
+.kicker { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--hint); display: flex; gap: 10px; align-items: center; }
+.kicker::before { content: ""; width: 18px; height: 1.5px; background: linear-gradient(90deg, var(--red), var(--cyan)); }
+.idea-title { font-family: var(--serif); font-style: italic; color: var(--hint); margin: 4px 0 0; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: 29px; line-height: 1.12; letter-spacing: -.015em; margin: 14px 0 6px; }
+.note { color: var(--hint); font-size: 13px; margin: 0 0 4px; }
+.summary { border-radius: 16px; padding: 12px 14px; margin-top: 14px; font-size: 14px; background: var(--bg2); border: 1px solid var(--line); }
+.options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.opt { position: relative; overflow: hidden; isolation: isolate; text-align: left; min-height: 64px; padding: 14px 15px; border-radius: 18px;
+  border: 1px solid var(--line); background: var(--bg2); font-size: 15px; font-weight: 550; line-height: 1.25;
+  transition: transform .45s var(--soft), border-color .3s, background .3s, box-shadow .4s; }
+.opt::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--prism); opacity: 0; transition: opacity .45s var(--ease); }
+.opt::after { content: ""; position: absolute; inset: 1.5px; z-index: -1; border-radius: 16.5px; background: var(--solid); opacity: 0; transition: opacity .3s; }
+.opt:active { transform: scale(.95); }
+.opt.on { border-color: transparent; box-shadow: var(--glow); }
+.opt.on::before { opacity: 1; animation: turn 6s linear infinite; }
+.opt.on::after { opacity: 1; }
+.opt .tick { position: absolute; right: 12px; top: 12px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--prism); color: #fff; font-size: 11px; transform: scale(0); transition: transform .5s var(--soft); }
+.opt.on .tick { transform: scale(1); }
+.own { width: 100%; margin-top: 12px; border: 1px solid var(--line); background: var(--bg2); border-radius: 16px; padding: 14px 15px; outline: none;
+  transition: border-color .3s, box-shadow .3s; }
+.own:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-a); }
+.label { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--hint); margin: 24px 2px 10px; }
+.formats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.fmt { border: 1px solid var(--line); background: var(--bg2); border-radius: 16px; padding: 12px 4px 9px; display: flex; flex-direction: column;
+  align-items: center; gap: 7px; position: relative; transition: transform .45s var(--soft), border-color .3s, box-shadow .3s; }
+.fmt:active { transform: scale(.93); }
+.fmt .shape { border: 1.5px solid var(--hint); border-radius: 4px; transition: all .45s var(--soft); }
+.fmt small { font-size: 11px; color: var(--hint); }
+.fmt.on { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-a); }
+.fmt.on .shape { border-color: var(--text); background: linear-gradient(135deg, var(--red-a), var(--cyan-a)); }
+.star { position: absolute; top: -7px; right: -4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; color: #08090b;
+  background: linear-gradient(90deg, #ffd36e, var(--cyan)); }
+.models { display: grid; gap: 8px; }
+.model { text-align: left; border: 1px solid var(--line); background: var(--bg2); border-radius: 16px; padding: 13px 15px; position: relative;
+  transition: border-color .3s, box-shadow .3s, transform .45s var(--soft); }
+.model b { font-weight: 650; }
+.model small { display: block; color: var(--hint); font-size: 12.5px; margin-top: 3px; }
+.model.on { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-a); }
+.model:active { transform: scale(.98); }
+.seg { display: flex; gap: 6px; padding: 4px; border-radius: 16px; background: var(--bg2); border: 1px solid var(--line); }
+.seg button { flex: 1; border: 0; background: none; border-radius: 12px; padding: 10px 6px; font-size: 13.5px; color: var(--hint);
+  transition: background .35s var(--ease), color .3s; }
+.seg button.on { background: var(--text); color: var(--bg); font-weight: 650; }
+.count { display: flex; align-items: center; gap: 16px; }
+.dial { flex: none; width: 108px; height: 108px; border-radius: 50%; display: grid; place-items: center; position: relative;
+  background: conic-gradient(var(--cyan) calc(var(--p, 0) * 1turn), var(--bg3) 0); transition: --p .5s; }
+.dial::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--bg); }
+.dial span { position: relative; font-family: var(--serif); font-size: 40px; line-height: 1; }
+.dial span.pop { animation: pop .5s var(--soft); }
+@keyframes pop { from { transform: scale(1.35); filter: blur(4px); opacity: .3; } }
+.count-side { flex: 1; display: grid; gap: 10px; }
+.plusminus { display: flex; gap: 8px; }
+.plusminus button { flex: 1; height: 46px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg2); font-size: 22px;
+  transition: transform .4s var(--soft); }
+.plusminus button:active { transform: scale(.88); }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick button { border: 1px solid var(--line); background: var(--bg2); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.quick button.on { border-color: var(--cyan); color: var(--cyan); }
+.brief { border-radius: var(--radius); padding: 1.5px; background: var(--prism); animation: turn 14s linear infinite; margin-top: 16px; }
+.brief > div { border-radius: calc(var(--radius) - 1.5px); background: var(--solid); padding: 16px; }
+.brief dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; font-size: 14px; }
+.brief dt { color: var(--hint); }
+.brief dd { margin: 0; }
+.nav { display: flex; gap: 10px; margin-top: 26px; }
+.ghost { border: 1px solid var(--line); background: var(--bg2); border-radius: 16px; padding: 13px 16px; transition: transform .4s var(--soft); }
+.ghost:active { transform: scale(.95); }
+.go { position: fixed; z-index: 4; left: 18px; right: 18px; bottom: calc(16px + env(safe-area-inset-bottom)); max-width: 584px; margin: 0 auto;
+  height: 56px; border: 0; border-radius: 18px; color: #fff; font-weight: 700; font-size: 16px; overflow: hidden; isolation: isolate;
+  background: #16181d; box-shadow: 0 12px 36px rgba(0,0,0,.4), var(--glow); transition: transform .4s var(--soft), opacity .3s; }
+.go::before { content: ""; position: absolute; inset: -60%; z-index: -2; background: var(--prism); animation: turn 5s linear infinite; }
+.go::after { content: ""; position: absolute; inset: 2px; z-index: -1; border-radius: 16px; background: linear-gradient(180deg, #1b1d23, #0f1014); }
+.go:active { transform: scale(.97); }
+.go:disabled { opacity: .45; }
+.sent { text-align: center; padding: 70px 10px; }
+.sent .iris { width: 74px; height: 74px; margin: 0 auto 20px; }
+.sent .iris::before { inset: 14px; } .sent .iris::after { inset: 27px; }
+.outside { margin-top: 26px; font-size: 13px; color: var(--hint); border: 1px dashed var(--line); border-radius: 16px; padding: 14px; }
+.outside code { display: block; margin-top: 8px; word-break: break-all; font-size: 11.5px; color: var(--text); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="sun" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<main class="page">
+  <header class="dev"><span class="iris"></span><span class="word">Bild<b>studio</b></span><span class="tag" id="tag">Ideen-Studio</span></header>
+  <section id="view"></section>
+</main>
+<button class="go hidden" id="go"></button>
+
+<script>
+"use strict";
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = !!(tg && tg.initData);
+const EXAMPLES = ["Eine Katze als Astronautin auf dem Mond", "Ein Geburtstagsbild für Oma, sie wird 80 und liebt ihren Garten",
+  "Logo-Ideen für ein Café namens „Morgenrot“", "Mein Hund als Ritter in einer Fantasy-Welt", "Ein gemütliches Baumhaus im Herbstregen"];
+const QUALITY = { normal: "Normal", hoch: "Hoch · 2K", maximal: "Maximal · 4K" };
+const VARIETY = { vielfalt: ["Abwechslungsreich", "jedes Bild mit eigener Idee"], gleich: ["Gleiche Szene", "nur anders gewürfelt"] };
+const QUICK = [1, 4, 8, 12, 20, 50, 100];
+
+const $ = (s) => document.querySelector(s);
+const view = $("#view"), go = $("#go");
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const buzz = (kind = "light") => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(kind); } catch (e) { /* no haptics */ } };
+
+if (tg) {
+  tg.ready(); tg.expand();
+  if (inTelegram) {
+    document.documentElement.setAttribute("data-tg", "");
+    if (tg.colorScheme === "light") document.documentElement.setAttribute("data-light", "");
+    try { tg.setHeaderColor(tg.colorScheme === "light" ? "#f5f5f2" : "#08090b"); tg.setBackgroundColor(tg.colorScheme === "light" ? "#f5f5f2" : "#08090b"); } catch (e) { /* old client */ }
+  }
+}
+if (inTelegram && tg.colorScheme === "light") {
+  const r = document.documentElement.style;
+  r.setProperty("--bg", "#f5f5f2"); r.setProperty("--bg2", "rgba(0,0,0,.035)"); r.setProperty("--bg3", "rgba(0,0,0,.065)");
+  r.setProperty("--solid", "#ffffff"); r.setProperty("--text", "#111214"); r.setProperty("--hint", "#6a6f78"); r.setProperty("--line", "rgba(0,0,0,.08)");
+}
+
+/* ---------- the idea's questions come in the link: #i=<base64url JSON> ---------- */
+function payload() {
+  const m = location.hash.match(/[#&]i=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try {
+    const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/") + "===".slice((m[1].length + 3) % 4);
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) { return null; }
+}
+
+/* ---------- the main button: Telegram's own one inside Telegram, ours in a browser ---------- */
+let goAction = null;
+function setGo(text, action, enabled = true) {
+  goAction = action;
+  if (inTelegram) {
+    tg.MainButton.setParams({ text, is_active: enabled, is_visible: true, has_shine_effect: enabled });
+    return;
+  }
+  go.textContent = text; go.disabled = !enabled; go.classList.remove("hidden");
+}
+function hideGo() { goAction = null; if (inTelegram) tg.MainButton.hide(); else go.classList.add("hidden"); }
+go.addEventListener("click", () => goAction && goAction());
+if (inTelegram) tg.MainButton.onClick(() => goAction && goAction());
+
+let backAction = null;
+function setBack(action) {
+  backAction = action;
+  if (!inTelegram) return;
+  if (action) tg.BackButton.show(); else tg.BackButton.hide();
+}
+if (inTelegram) tg.BackButton.onClick(() => backAction && backAction());
+
+function show(html, after) {
+  const old = view.firstElementChild;
+  const draw = () => { view.innerHTML = html; view.querySelectorAll(".dev").forEach((el, i) => el.style.setProperty("--i", i)); after && after(); window.scrollTo({ top: 0 }); };
+  if (old) { old.classList.add("leave"); setTimeout(draw, 220); } else draw();
+}
+
+function send(data, label) {
+  const text = JSON.stringify(data);
+  if (inTelegram) {
+    buzz("medium");
+    try { tg.sendData(text); return; } catch (e) { /* opened another way: show the data */ }
+  }
+  hideGo(); setBack(null);
+  show(`<div class="sent"><div class="iris dev"></div><h2 class="dev">${esc(label)}</h2>
+    <p class="note dev">Diese Seite gehört zum Bildstudio-Bot in Telegram – dort öffnen, dann geht es direkt los.</p>
+    <div class="outside dev">Gesendet würde:<code>${esc(text)}</code></div></div>`);
+}
+
+/* ================= home: tell me your idea ================= */
+function home() {
+  setBack(null);
+  show(`<div>
+    <h1 class="dev">Was möchtest du <em>sehen</em>?</h1>
+    <p class="lead dev">Erzähl mir deine Idee in ein paar Worten. Ich frage nach, was noch offen ist – und mache dir so viele Bilder, wie du willst.</p>
+    <div class="canvas dev"><div class="canvas-in">
+      <textarea id="idea" maxlength="2000" placeholder="z. B. Ein Leuchtturm im Sturm bei Nacht …"></textarea>
+      <div class="counter"><span id="len">0</span>/2000</div>
+    </div></div>
+    <div class="examples dev">${EXAMPLES.map((e) => `<button data-ex="${esc(e)}">${esc(e)}</button>`).join("")}</div>
+    <div class="steps">
+      <div class="step dev"><i>1</i><div><b>Deine Idee</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl.</span></div></div>
+      <div class="step dev"><i>2</i><div><b>Ein paar Fragen</b><span>Stil, Look, Licht, Details – an alles gedacht.</span></div></div>
+      <div class="step dev"><i>3</i><div><b>Format & Anzahl</b><span>Hochkant, Breitbild, bis zu 20 Bilder auf einmal.</span></div></div>
+      <div class="step dev"><i>4</i><div><b>Deine Bilder</b><span>Kommen hier im Chat an, als Alben.</span></div></div>
+    </div></div>`, () => {
+    const box = $("#idea"), len = $("#len");
+    const update = () => { len.textContent = box.value.length; setGo("Idee senden ✨", () => send({ t: "idea", idea: box.value.trim() }, "Idee unterwegs …"), box.value.trim().length >= 3); };
+    box.addEventListener("input", update);
+    view.querySelectorAll("[data-ex]").forEach((b) => b.addEventListener("click", () => { box.value = b.dataset.ex; buzz(); update(); box.focus(); }));
+    update();
+  });
+}
+
+/* ================= interview: the questions, then the choices ================= */
+function interview(p) {
+  const s = { i: 0, a: (p.q || []).map((_, i) => (p.a && p.a[i]) || ""), x: p.x || "", f: p.fo || p.fs, m: p.mo, ql: p.qo || "normal",
+              va: p.va || "vielfalt", n: Math.min(p.n || 4, p.max || 20) };
+  const qs = p.q || [];
+  const total = qs.length + 3;   // questions, wish, choices, brief
+  const bar = (k) => `<div class="progress"><div style="width:${Math.round(k / total * 100)}%"></div></div>`;
+  $("#tag").textContent = p.title || "Ideen-Studio";
+
+  function question() {
+    if (s.i >= qs.length) return wish();
+    const q = qs[s.i];
+    const chosen = q.m ? s.a[s.i].split(", ").filter(Boolean) : [s.a[s.i]];
+    const own = q.o.includes(s.a[s.i]) || (q.m && chosen.every((c) => q.o.includes(c))) ? "" : s.a[s.i];
+    setBack(s.i > 0 ? () => { s.i--; question(); } : null);
+    show(`<div>${bar(s.i)}
+      <div class="kicker dev">Frage ${s.i + 1} von ${qs.length}</div>
+      ${s.i === 0 && p.summary ? `<div class="summary dev">💡 ${esc(p.summary)}</div>` : ""}
+      <h2 class="dev">${esc(q.t)}</h2>${q.m ? `<p class="note dev">Mehrere möglich</p>` : ""}
+      <div class="options">${q.o.map((o, k) => `<button class="opt dev ${chosen.includes(o) ? "on" : ""}" data-k="${k}"><span class="tick">✓</span>${esc(o)}</button>`).join("")}</div>
+      <input class="own dev" id="own" placeholder="… oder eigene Antwort" value="${esc(own)}">
+      ${inTelegram ? "" : `<div class="nav dev">${s.i > 0 ? `<button class="ghost" id="back">←</button>` : ""}</div>`}</div>`, () => {
+      const next = () => { s.i++; question(); };
+      view.querySelectorAll(".opt").forEach((b) => b.addEventListener("click", () => {
+        const o = q.o[+b.dataset.k];
+        buzz();
+        if (q.m) {
+          const set = s.a[s.i].split(", ").filter(Boolean);
+          s.a[s.i] = (set.includes(o) ? set.filter((c) => c !== o) : [...set, o]).join(", ");
+          b.classList.toggle("on");
+          label();
+        } else {
+          s.a[s.i] = s.a[s.i] === o ? "" : o;
+          view.querySelectorAll(".opt").forEach((x) => x.classList.toggle("on", x === b && s.a[s.i] === o));
+          if (s.a[s.i]) setTimeout(next, 330); else label();
+        }
+      }));
+      $("#own").addEventListener("input", (e) => { s.a[s.i] = e.target.value; view.querySelectorAll(".opt").forEach((x) => x.classList.remove("on")); label(); });
+      const back = $("#back"); if (back) back.addEventListener("click", () => { s.i--; question(); });
+      const label = () => setGo(s.a[s.i].trim() ? "Weiter" : "Egal – du entscheidest", next);
+      label();
+    });
+  }
+
+  function wish() {
+    setBack(() => { s.i = qs.length - 1; question(); });
+    show(`<div>${bar(qs.length)}
+      <div class="kicker dev">Fast geschafft</div>
+      <h2 class="dev">Noch etwas, das wichtig ist?</h2>
+      <p class="note dev">Ein Detail, ein Wunsch, ein „bitte nicht“ – oder einfach weiter.</p>
+      <div class="canvas dev" style="margin-top:16px"><div class="canvas-in"><textarea id="x" maxlength="600" placeholder="z. B. sie trägt eine rote Brille · kein Text im Bild">${esc(s.x)}</textarea></div></div></div>`, () => {
+      $("#x").addEventListener("input", (e) => { s.x = e.target.value; });
+      setGo("Weiter", choices);
+    });
+  }
+
+  function choices() {
+    setBack(wish);
+    const ratio = (w, h) => { const k = 30 / Math.max(w, h); return `width:${Math.round(w * k)}px;height:${Math.round(h * k)}px`; };
+    show(`<div>${bar(qs.length + 1)}
+      <div class="kicker dev">Feinschliff</div>
+      <h2 class="dev">Format, Modell und Anzahl</h2>
+      <div class="label dev">Format</div>
+      <div class="formats dev">${p.f.map(([id, label, w, h]) => `<button class="fmt ${s.f === id ? "on" : ""}" data-f="${esc(id)}">
+        ${p.fs === id ? `<span class="star">Tipp</span>` : ""}<span class="shape" style="${ratio(w, h)}"></span><b>${esc(id)}</b><small>${esc(label.split(" (")[0])}</small></button>`).join("")}</div>
+      <div class="label dev">Bildmodell</div>
+      <div class="models dev">${p.ms.map(([id, label]) => `<button class="model ${s.m === id ? "on" : ""}" data-m="${esc(id)}">
+        ${id === p.mo ? `<span class="star">Tipp</span>` : ""}<b>${esc(label)}</b>${id === p.mo && p.mr ? `<small>${esc(p.mr)}</small>` : ""}</button>`).join("")}</div>
+      <div class="label dev">Qualität</div>
+      <div class="seg dev">${p.ql.map((q) => `<button class="${s.ql === q ? "on" : ""}" data-q="${esc(q)}">${esc(QUALITY[q] || q)}</button>`).join("")}</div>
+      <div class="label dev">Wie unterschiedlich?</div>
+      <div class="seg dev">${Object.entries(VARIETY).map(([k, [t]]) => `<button class="${s.va === k ? "on" : ""}" data-v="${k}">${t}</button>`).join("")}</div>
+      <p class="note dev" id="vnote">${esc(VARIETY[s.va][1])}</p>
+      <div class="label dev">Wie viele Bilder? <span style="text-transform:none;letter-spacing:0">– höchstens ${p.max}</span></div>
+      <div class="count dev">
+        <div class="dial" id="dial"><span id="n">${s.n}</span></div>
+        <div class="count-side">
+          <div class="plusminus"><button id="minus">−</button><button id="plus">+</button></div>
+          <div class="quick">${QUICK.filter((n) => n <= p.max).map((n) => `<button data-n="${n}" class="${s.n === n ? "on" : ""}">${n}</button>`).join("")}</div>
+        </div>
+      </div></div>`, () => {
+      const pick = (sel, key, attr) => view.querySelectorAll(sel).forEach((b) => b.addEventListener("click", () => {
+        s[key] = b.dataset[attr]; buzz(); view.querySelectorAll(sel).forEach((x) => x.classList.toggle("on", x === b));
+        if (key === "va") $("#vnote").textContent = VARIETY[s.va][1];
+      }));
+      pick(".fmt", "f", "f"); pick(".model", "m", "m"); pick(".seg [data-q]", "ql", "q"); pick(".seg [data-v]", "va", "v");
+      const setN = (n) => {
+        s.n = Math.max(1, Math.min(p.max, n));
+        const el = $("#n"); el.textContent = s.n; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+        $("#dial").style.setProperty("--p", (s.n / p.max).toFixed(3));
+        view.querySelectorAll("[data-n]").forEach((b) => b.classList.toggle("on", +b.dataset.n === s.n));
+        buzz("soft");
+      };
+      $("#minus").addEventListener("click", () => setN(s.n - 1));
+      $("#plus").addEventListener("click", () => setN(s.n + 1));
+      view.querySelectorAll("[data-n]").forEach((b) => b.addEventListener("click", () => setN(+b.dataset.n)));
+      $("#dial").style.setProperty("--p", (s.n / p.max).toFixed(3));
+      setGo("Zur Übersicht", brief);
+    });
+  }
+
+  function brief() {
+    setBack(choices);
+    const model = (p.ms.find(([id]) => id === s.m) || [s.m, s.m])[1];
+    const answered = qs.map((q, i) => [q.t, s.a[i]]).filter(([, a]) => a && a.trim());
+    show(`<div>${bar(qs.length + 2)}
+      <div class="kicker dev">Steckbrief</div>
+      <h2 class="dev">${esc(p.title)}</h2>
+      <div class="brief dev"><div><dl>
+        <dt>Format</dt><dd>${esc(s.f)}</dd><dt>Modell</dt><dd>${esc(model)}</dd><dt>Qualität</dt><dd>${esc(QUALITY[s.ql] || s.ql)}</dd>
+        <dt>Bilder</dt><dd>${s.n} · ${esc(VARIETY[s.va][0])}</dd>
+        ${answered.map(([q, a]) => `<dt>${esc(q.replace(/\?$/, ""))}</dt><dd>${esc(a)}</dd>`).join("")}
+        ${s.x.trim() ? `<dt>Außerdem</dt><dd>${esc(s.x)}</dd>` : ""}
+      </dl></div></div>
+      <p class="note dev" style="margin-top:14px">Ich schreibe daraus die Bildbeschreibungen und schicke dir den fertigen Steckbrief in den Chat – dort startest du mit 🚀.</p></div>`, () => {
+      setGo(`An Bildstudio senden · ${s.n} ${s.n === 1 ? "Bild" : "Bilder"}`, () => send({ t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n }, "Antworten unterwegs …"));
+    });
+  }
+
+  question();
+}
+
+const p = payload();
+if (p && p.v === 1 && Array.isArray(p.q)) interview(p); else home();
+</script>
+</body>
+</html>

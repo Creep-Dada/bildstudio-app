@@ -198,6 +198,22 @@ body.dock-on .sheet-scroll { padding-bottom: calc(100px + env(safe-area-inset-bo
 .info svg { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--text); }
 .info b { color: var(--text); font-weight: 600; }
 
+.picks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pick { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--elev-2); }
+.pick img { width: 100%; height: 100%; object-fit: cover; }
+.pick > i { position: absolute; left: 6px; top: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 7px; display: grid;
+  place-items: center; background: rgba(0,0,0,.55); color: #fff; font-style: normal; font-size: 11.5px; font-weight: 700; }
+.unpick { position: absolute; right: 5px; top: 5px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0,0,0,.55); color: #fff; transition: transform 160ms var(--ease-out); }
+.unpick:active { transform: scale(.9); }
+.unpick svg { width: 12px; height: 12px; }
+.pick.add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--muted);
+  font-size: 12px; font-weight: 600; box-shadow: inset 0 0 0 1.5px var(--line-2); transition: transform 160ms var(--ease-out), color 150ms ease; }
+.pick.add:active { transform: scale(.96); }
+.pick.add svg { width: 22px; height: 22px; color: var(--text); }
+.inline-link { display: block; margin-top: 6px; color: var(--text); font-weight: 600; font-size: 13.5px; text-decoration: underline;
+  text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+
 /* ---------- idea: how it works, the questions ---------- */
 .how { margin-top: 26px; display: grid; gap: 14px; }
 .how > div { display: flex; gap: 12px; align-items: flex-start; }
@@ -382,6 +398,11 @@ const FORMATS = (MENU && MENU.formats) || [{ id: "1:1", n: "Quadrat", w: 1, h: 1
 const QUALITIES = (MENU && MENU.qualities) || [{ id: "normal", n: "Normal" }];
 const MODELS = (MENU && MENU.models) || [];
 let quality = QUALITIES.some((q) => q.id === PREFS.ql) ? PREFS.ql : QUALITIES[0].id;
+/* 📮 the Briefkasten: photos go straight from here, encrypted for the PC. The bot's link carries a ticket (&k=) the PC
+   signed for this user – without it (or without the Briefkasten) the photos are sent in the chat as before. */
+const TICKET = (location.hash.match(/[#&]k=([0-9]+\.[0-9]+\.[A-Za-z0-9_-]+)/) || [])[1] || "";
+const BOX = MENU && MENU.box && MENU.box.url && MENU.box.key && TICKET && window.crypto && crypto.subtle ? MENU.box : null;
+const PART = 1 << 20;
 
 /* ---------- the main button: Telegram's own inside Telegram, ours in a browser ---------- */
 let goAction = null;
@@ -567,9 +588,85 @@ function fill() {
   });
 }
 
+/* ---------- 📮 photos into the Briefkasten ---------- */
+const b64 = (buf) => { let s = ""; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode(...a.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function seal(key, data, aad) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(aad) }, key, data));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(iv); out.set(ct, 12);
+  return out;
+}
+async function boxCall(method, path, { body, token, raw } = {}) {
+  const headers = token ? { "X-Up-Token": token } : { "X-Ticket": TICKET };
+  if (body !== undefined) headers["Content-Type"] = raw ? "application/octet-stream" : "application/json";
+  let r;
+  try {
+    r = await fetch(BOX.url.replace(/\/+$/, "") + path, { method, headers, body: body === undefined ? undefined : raw ? body : JSON.stringify(body) });
+  } catch (e) { const err = new Error("Keine Verbindung – Internet da?"); err.status = 0; throw err; }
+  let data = null;
+  try { data = await r.json(); } catch (e) { /* no JSON */ }
+  if (!r.ok) { const err = new Error((data && data.error) || `Hochladen ging nicht (${r.status})`); err.status = r.status; throw err; }
+  return data;
+}
+/* A phone photo, upright and at most 4096 px – smaller uploads, nothing the models would use is lost. */
+async function shrink(file) {
+  const png = file.type === "image/png";
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 4096 / Math.max(bmp.width, bmp.height));
+    if (png && scale === 1) { if (bmp.close) bmp.close(); return { blob: file, name: file.name || "foto.png" }; }
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise((ok) => c.toBlob(ok, png ? "image/png" : "image/jpeg", 0.93));
+    if (!blob) throw new Error("no blob");
+    return { blob, name: (file.name || "foto").replace(/\.[^.]+$/, "") + (png ? ".png" : ".jpg") };
+  } catch (e) { return { blob: file, name: file.name || "foto" }; }   // let the PC try (e.g. HEIC)
+}
+async function boxUpload(files, progress) {
+  const pub = await crypto.subtle.importKey("spki", unb64(BOX.key), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const wk = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pub, await crypto.subtle.exportKey("raw", key));
+  let n = 0;
+  const list = files.map((f) => { const count = Math.max(1, Math.ceil(f.blob.size / PART)); const e = { name: f.name, size: f.blob.size, first: n, count }; n += count; return e; });
+  const total = files.reduce((a, f) => a + f.blob.size, 0);
+  const man = await seal(key, new TextEncoder().encode(JSON.stringify({ v: 1, files: list })), "man");
+  const up = await boxCall("POST", "/up", { body: { wk: b64(wk), man: b64(man), parts: n, size: total } });
+  const jobs = [];
+  list.forEach((e, i) => { for (let j = 0; j < e.count; j++) jobs.push({ blob: files[i].blob, size: e.size, j, n: e.first + j }); });
+  let sent = 0, next = 0;
+  const one = async (job) => {
+    const piece = job.blob.slice(job.j * PART, Math.min(job.size, (job.j + 1) * PART));
+    const body = await seal(key, await piece.arrayBuffer(), `part:${job.n}`);
+    for (let a = 0; ; a++) {
+      try { await boxCall("PUT", `/up/${up.id}/${job.n}`, { body, token: up.token, raw: true }); break; } catch (e) {
+        if (a >= 3 || (e.status >= 400 && e.status < 500 && e.status !== 429)) throw e;
+        await new Promise((ok) => setTimeout(ok, 900 * (a + 1)));
+      }
+    }
+    sent += piece.size; progress(total ? sent / total : 1);
+  };
+  await Promise.all([0, 1, 2].map(async () => { while (next < jobs.length) await one(jobs[next++]); }));
+  await boxCall("POST", `/up/${up.id}/done`, { token: up.token });
+  return up.id;
+}
+function goBusy(text) {   // the main button shows progress and takes no taps
+  goAction = null;
+  if (inTelegram) {
+    tg.MainButton.setParams({ text, is_active: false, is_visible: true, color: "#ff2d55", text_color: "#ffffff" });
+    try { tg.MainButton.showProgress(false); } catch (e) { /* older client */ }
+  } else { go.textContent = text; go.disabled = true; }
+}
+function goIdle() { if (inTelegram) { try { tg.MainButton.hideProgress(); } catch (e) { /* older client */ } } }
+
 /* ---------- the effect sheet ---------- */
+let picked = [];   // the photos chosen in the sheet: {file, url}
 function openSheet(f) {
   if (!f) return;
+  picked.forEach((p) => URL.revokeObjectURL(p.url)); picked = [];
   const catName = (MENU.categories.find((c) => c.id === f.c) || { n: "" }).n;
   const which = f.i[0] === 1 && f.i[1] === 1 ? "dein Foto" : photos(f);
   sheetScroll.innerHTML = `<div class="hero">${f.v ? `<img src="${esc(f.v)}" alt="" draggable="false">` : `<span class="emo">${f.e}</span>`}</div>
@@ -579,7 +676,12 @@ function openSheet(f) {
       ${f.h && f.h.length ? `<ol class="hints">${f.h.map((h, i) => `<li><i>${i + 1}</i><span>${esc(h)}</span></li>`).join("")}</ol>` : ""}
       ${(f.p || []).map((p) => `<div class="label">${esc(p.a)}</div><div class="field"><input class="param" data-k="${esc(p.k)}" placeholder="${esc(p.d)}" enterkeyhint="done"></div>`).join("")}
       <div class="label">Qualität</div>${seg("sq", qualityItems(), quality)}
-      <div class="info">${ICON.camera}<span>Danach schickst du <b>${which}</b> im Chat – das Ergebnis kommt direkt aufs Handy.</span></div>
+      ${BOX ? `<div class="label">${f.i[1] > 1 ? `Deine Fotos · ${photos(f)}` : "Dein Foto"}</div>
+      <div class="picks" id="picks"></div>
+      <input type="file" id="file" accept="image/*" ${f.i[1] > 1 ? "multiple" : ""} hidden>
+      <div class="info">${ICON.camera}<span>Geht verschlüsselt direkt an deinen PC – das Ergebnis kommt in den Chat.
+        <button class="inline-link" id="viaChat">Lieber im Chat schicken</button></span></div>`
+      : `<div class="info">${ICON.camera}<span>Danach schickst du <b>${which}</b> im Chat – das Ergebnis kommt direkt aufs Handy.</span></div>`}
     </div>`;
   sheetScroll.scrollTop = 0;
   sheet.classList.add("open"); scrim.classList.add("open"); document.body.classList.add("lock");
@@ -595,16 +697,57 @@ function openSheet(f) {
   pick($("#sq"), (v) => { quality = v; });
   $$(".param", sheetScroll).forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); }));
   setBack(() => closeSheet());
-  setGo(f.i[0] > 1 ? `Auswählen · ${f.i[0]} Fotos schicken` : "Auswählen · Foto schicken", () => {
+  const answers = () => {
     const p = {};
     $$(".param", sheetScroll).forEach((i) => { if (i.value.trim()) p[i.dataset.k] = i.value.trim(); });
-    send({ t: "filter", id: f.id, q: quality, p }, `${f.n} – gewählt. Schick jetzt im Chat ${which}.`);
+    return p;
+  };
+  const viaChat = () => send({ t: "filter", id: f.id, q: quality, p: answers() }, `${f.n} – gewählt. Schick jetzt im Chat ${which}.`);
+  if (!BOX) { setGo(f.i[0] > 1 ? `Auswählen · ${f.i[0]} Fotos schicken` : "Auswählen · Foto schicken", viaChat); return; }
+
+  const [low, high] = f.i, input = $("#file"), box = $("#picks");
+  const paint = () => {
+    box.innerHTML = picked.map((p, i) => `<div class="pick"><img src="${p.url}" alt=""><i>${i + 1}</i>
+        <button class="unpick" data-i="${i}" aria-label="Foto ${i + 1} entfernen">${ICON.x}</button></div>`).join("")
+      + (picked.length < high ? `<button class="pick add" id="add">${ICON.camera}<span>${picked.length ? "Noch eins" : low > 1 ? "Fotos wählen" : "Foto wählen"}</span></button>` : "");
+    const missing = low - picked.length;
+    if (missing > 0) setGo(picked.length ? `Noch ${plural(missing, "Foto", "Fotos")} wählen` : (low > 1 ? `${low} Fotos wählen` : "Erst ein Foto wählen"), null, false);
+    else setGo("Los · Effekt starten", start);
+  };
+  const start = async () => {
+    const p = answers();
+    goBusy("Wird vorbereitet …");
+    try {
+      const files = [];
+      for (const one of picked) files.push(await shrink(one.file));
+      const id = await boxUpload(files, (x) => goBusy(`Hochladen … ${Math.round(x * 100)} %`));
+      goIdle();
+      send({ t: "filter", id: f.id, q: quality, p, box: id }, `${f.n} – unterwegs. Das Ergebnis kommt in den Chat.`);
+    } catch (e) {
+      goIdle(); haptic.tap("heavy");
+      toast(e.message || "Hochladen ging nicht"); paint();
+    }
+  };
+  box.addEventListener("click", (e) => {
+    const un = e.target.closest(".unpick");
+    if (un) { const [gone] = picked.splice(+un.dataset.i, 1); URL.revokeObjectURL(gone.url); haptic.pick(); paint(); return; }
+    if (e.target.closest("#add")) input.click();
   });
+  input.addEventListener("change", () => {
+    const room = high - picked.length;
+    [...input.files].filter((x) => x.type.startsWith("image/") || !x.type).slice(0, room)
+      .forEach((file) => picked.push({ file, url: URL.createObjectURL(file) }));
+    if (input.files.length > room) toast(`Höchstens ${plural(high, "Foto", "Fotos")} für diesen Effekt`);
+    input.value = ""; haptic.tap(); paint();
+  });
+  $("#viaChat").addEventListener("click", viaChat);
+  paint();
 }
 function closeSheet(silent) {
   if (!sheet.classList.contains("open")) return;
   sheet.classList.remove("open", "dragging"); scrim.classList.remove("open", "dragging"); document.body.classList.remove("lock");
   sheet.style.transform = ""; scrim.style.opacity = "";
+  picked.forEach((p) => URL.revokeObjectURL(p.url)); picked = [];
   try { if (inTelegram && tg.enableVerticalSwipes) tg.enableVerticalSwipes(); } catch (e) { /* older client */ }
   if (!silent) { setBack(null); hideGo(); }
 }
@@ -724,39 +867,32 @@ function interview(dir) {
   };
 
   if (step < qs.length) {   // ---- a question
+    // every question takes several answers (and an own one on top); nothing moves on by itself
     const q = qs[step];
-    const chosen = q.m ? s.a[step].split(", ").filter(Boolean) : [s.a[step]];
-    const own = q.o.includes(s.a[step]) || (q.m && chosen.every((c) => q.o.includes(c))) ? "" : s.a[step];
+    const parts = s.a[step].split(", ").map((c) => c.trim()).filter(Boolean);
+    const chosen = new Set(parts.filter((c) => q.o.includes(c)));
+    let own = parts.filter((c) => !q.o.includes(c)).join(", ");
+    const keep = () => { s.a[step] = [...q.o.filter((o) => chosen.has(o)), own.trim()].filter(Boolean).join(", "); };
     const two = q.o.every((o) => o.length <= 18);
-    const label = () => setGo(s.a[step].trim() ? "Weiter" : "Überspringen", () => goStep(step + 1));
     render(`<div>${head}
       <p class="step-no">Frage ${step + 1} von ${qs.length}</p>
       ${step === 0 && p.summary ? `<p class="summary">${esc(p.summary)}</p>` : ""}
-      <h2>${esc(q.t)}</h2>${q.m ? '<p class="note">Mehrere möglich</p>' : ""}
-      <div class="list${two ? " two" : ""}" id="opts" style="margin-top:16px">${q.o.map((o, k) => `<button class="opt${chosen.includes(o) ? " on" : ""}" data-k="${k}">
+      <h2>${esc(q.t)}</h2><p class="note">Tipp alles an, was passt – gern auch mehreres.</p>
+      <div class="list${two ? " two" : ""}" id="opts" style="margin-top:16px">${q.o.map((o, k) => `<button class="opt${chosen.has(o) ? " on" : ""}" data-k="${k}">
         <span class="txt"><b>${esc(o)}</b></span><span class="check">${ICON.check}</span></button>`).join("")}</div>
-      <div class="field own"><input id="own" placeholder="… oder eigene Antwort" value="${esc(own)}" enterkeyhint="next"></div></div>`, (el) => {
+      <div class="field own"><input id="own" placeholder="… und/oder eigene Antwort" value="${esc(own)}" enterkeyhint="next"></div></div>`, (el) => {
       wire(el);
       $("#opts").addEventListener("click", (e) => {
         const b = e.target.closest(".opt"); if (!b) return;
         const o = q.o[+b.dataset.k];
-        haptic.pick(); $("#own").value = "";
-        if (q.m) {
-          const set = s.a[step].split(", ").filter((c) => c && q.o.includes(c));
-          s.a[step] = (set.includes(o) ? set.filter((c) => c !== o) : [...set, o]).join(", ");
-          b.classList.toggle("on", s.a[step].split(", ").includes(o));
-          label();
-        } else {
-          s.a[step] = s.a[step] === o ? "" : o;
-          $$("#opts .opt").forEach((x) => x.classList.toggle("on", x === b && s.a[step] === o));
-          label();
-          if (s.a[step]) setTimeout(() => { if (iv.step === step && tab === "idea") goStep(step + 1); }, 240);
-        }
+        if (chosen.has(o)) chosen.delete(o); else chosen.add(o);
+        b.classList.toggle("on", chosen.has(o));
+        haptic.pick(); keep();
       });
       const ownInput = $("#own");
-      ownInput.addEventListener("input", () => { s.a[step] = ownInput.value; $$("#opts .opt").forEach((x) => x.classList.remove("on")); label(); });
+      ownInput.addEventListener("input", () => { own = ownInput.value; keep(); });
       ownInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { ownInput.blur(); goStep(step + 1); } });
-      label();
+      setGo(step < qs.length - 1 ? "Nächste Frage" : "Nächste Seite", () => goStep(step + 1));
     }, dir);
     return;
   }
@@ -769,7 +905,7 @@ function interview(dir) {
       <div class="field" style="margin-top:16px"><textarea id="x" maxlength="600" placeholder="z. B. sie trägt eine rote Brille · kein Text im Bild">${esc(s.x)}</textarea></div></div>`, (el) => {
       wire(el);
       $("#x").addEventListener("input", (e) => { s.x = e.target.value; });
-      setGo("Weiter", () => goStep(step + 1));
+      setGo("Nächste Seite", () => goStep(step + 1));
     }, dir);
     return;
   }
@@ -802,7 +938,7 @@ function interview(dir) {
       $("#plus").addEventListener("click", () => setN(s.n + 1));
       $("#quick").addEventListener("click", (e) => { const b = e.target.closest("[data-n]"); if (b) setN(+b.dataset.n); });
       $("#minus").disabled = s.n <= 1; $("#plus").disabled = s.n >= s.max;
-      setGo("Weiter", () => goStep(step + 1));
+      setGo("Nächste Seite", () => goStep(step + 1));
     }, dir);
     return;
   }

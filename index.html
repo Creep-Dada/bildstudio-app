@@ -675,11 +675,11 @@ function openSheet(f) {
       <p class="meta">${f.e} ${esc(catName)} · ${photos(f)}</p>
       ${f.h && f.h.length ? `<ol class="hints">${f.h.map((h, i) => `<li><i>${i + 1}</i><span>${esc(h)}</span></li>`).join("")}</ol>` : ""}
       ${(f.p || []).map((p) => `<div class="label">${esc(p.a)}</div><div class="field"><input class="param" data-k="${esc(p.k)}" placeholder="${esc(p.d)}" enterkeyhint="done"></div>`).join("")}
-      <div class="label">Qualität</div>${seg("sq", qualityItems(), quality)}
       ${BOX ? `<div class="label">${f.i[1] > 1 ? `Deine Fotos · ${photos(f)}` : "Dein Foto"}</div>
       <div class="picks" id="picks"></div>
-      <input type="file" id="file" accept="image/*" ${f.i[1] > 1 ? "multiple" : ""} hidden>
-      <div class="info">${ICON.camera}<span>Geht verschlüsselt direkt an deinen PC – das Ergebnis kommt in den Chat.
+      <input type="file" id="file" accept="image/*" ${f.i[1] > 1 ? "multiple" : ""} hidden>` : ""}
+      <div class="label">Qualität</div>${seg("sq", qualityItems(), quality)}
+      ${BOX ? `<div class="info">${ICON.camera}<span>Geht verschlüsselt direkt an deinen PC – das Ergebnis kommt in den Chat.
         <button class="inline-link" id="viaChat">Lieber im Chat schicken</button></span></div>`
       : `<div class="info">${ICON.camera}<span>Danach schickst du <b>${which}</b> im Chat – das Ergebnis kommt direkt aufs Handy.</span></div>`}
     </div>`;

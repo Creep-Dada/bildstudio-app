@@ -241,6 +241,40 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 29px; line-height: 
 .how { margin-top: 18px; font-size: 13px; color: var(--hint); display: flex; gap: 8px; align-items: center; }
 .how b { color: var(--text); font-weight: 600; }
 body.sheet-open { overflow: hidden; }
+
+/* ---------- ⚙️ settings: calm grouped rows, like a phone's own settings ---------- */
+.tabs button.gear { flex: 0 0 52px; font-size: 16px; }
+.group { margin-top: 22px; }
+.group > .label { margin: 0 4px 8px; }
+.rows { border-radius: 18px; background: var(--bg2); border: 1px solid var(--line); overflow: hidden; }
+.srow { padding: 14px 15px; display: grid; gap: 10px; }
+.srow + .srow { border-top: 1px solid var(--line); }
+.srow .head { display: flex; align-items: center; gap: 12px; }
+.srow .head b { font-weight: 600; font-size: 15px; }
+.srow .head small { display: block; color: var(--hint); font-size: 12.5px; margin-top: 2px; font-weight: 400; }
+.srow .head .txt { flex: 1; min-width: 0; }
+.switch { appearance: none; -webkit-appearance: none; flex: none; width: 50px; height: 30px; border-radius: 999px; background: var(--bg3);
+  position: relative; margin: 0; transition: background .35s var(--ease); cursor: pointer; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .5s var(--soft); }
+.switch:checked { background: linear-gradient(90deg, var(--red), var(--violet), var(--cyan)); }
+.switch:checked::after { transform: translateX(20px); }
+.choice { display: grid; gap: 8px; }
+.choice button { text-align: left; border: 1px solid var(--line); background: transparent; border-radius: 14px; padding: 11px 13px;
+  display: flex; gap: 11px; align-items: center; transition: border-color .3s, box-shadow .3s, transform .4s var(--soft); }
+.choice button:active { transform: scale(.98); }
+.choice button .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--hint); position: relative; }
+.choice button.on { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-a); }
+.choice button.on .dot { border-color: transparent; background: var(--prism); }
+.choice button.on .dot::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #fff; }
+.choice button b { font-weight: 600; font-size: 14.5px; }
+.choice button small { display: block; color: var(--hint); font-size: 12px; margin-top: 1px; }
+.account { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+.account div { background: var(--solid); padding: 13px 15px; }
+.account b { display: block; font-family: var(--serif); font-size: 24px; font-weight: 400; line-height: 1.1; }
+.account small { color: var(--hint); font-size: 12px; }
+.fold { overflow: hidden; transition: max-height .5s var(--soft), opacity .4s; max-height: 120px; }
+.fold.shut { max-height: 0; opacity: 0; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
@@ -249,7 +283,7 @@ body.sheet-open { overflow: hidden; }
 <div class="grain" aria-hidden="true"></div>
 <main class="page">
   <header class="dev"><span class="iris"></span><span class="word">Bild<b>studio</b></span><span class="tag" id="tag"></span></header>
-  <nav class="tabs dev hidden" id="tabs"><i class="pill"></i><button data-tab="effects">✨ Effekte</button><button data-tab="idea">💡 Idee</button><button data-tab="create">🎨 Erstellen</button></nav>
+  <nav class="tabs dev hidden" id="tabs"><i class="pill"></i><button data-tab="effects">✨ Effekte</button><button data-tab="idea">💡 Idee</button><button data-tab="create">🎨 Erstellen</button><button data-tab="settings" class="gear" aria-label="Einstellungen">⚙️</button></nav>
   <section id="view"></section>
 </main>
 <div class="veil" id="veil"></div>
@@ -354,8 +388,9 @@ $("#tabs").addEventListener("click", (e) => {
 });
 function openTab(next) {
   tab = next; closeSheet(true); tabs(next);
-  $("#tag").textContent = { effects: `${(MENU && MENU.effects.length) || ""} Effekte`, idea: "Ideen-Studio", create: "Text → Bild" }[next];
-  ({ effects, idea: home, create })[next]();
+  $("#tag").textContent = { effects: `${(MENU && MENU.effects.length) || ""} Effekte`, idea: "Ideen-Studio", create: "Text → Bild",
+                             settings: "Einstellungen" }[next];
+  ({ effects, idea: home, create, settings })[next]();
 }
 
 /* ---------- favourites: in Telegram's cloud storage (per user), else in the browser ---------- */
@@ -478,6 +513,85 @@ function create() {
     $("#cq").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; quality = b.dataset.q; buzz(); $("#cq").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); });
     $("#cn").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; made.n = +b.dataset.n; buzz(); $("#cn").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); });
     update();
+  });
+}
+
+/* ================= ⚙️ settings: sent to the bot, which keeps them; the bot puts the current ones in the link ================= */
+function linkSettings() {
+  const m = location.hash.match(/[#&]s=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try {
+    const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/") + "===".slice((m[1].length + 3) % 4);
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))));
+  } catch (e) { return null; }
+}
+const PREFS = Object.assign({ ql: "normal", f: "1:1", m: "", d: "einzeln", file: false, quick: false, n: 1, max: 20, limit: null }, linkSettings() || {});
+quality = PREFS.ql || quality;
+made.f = PREFS.f || made.f;
+function settings() {
+  setBack(null);
+  const s = Object.assign({}, PREFS);
+  const models = (MENU && MENU.models) || [];
+  const fmts = (MENU && MENU.formats) || [];
+  const quals = (MENU && MENU.qualities) || [{ id: "normal", n: "Normal" }];
+  const maxN = (MENU && MENU.variants) || 4;
+  const ratio = (w, h) => { const k = 26 / Math.max(w, h); return `width:${Math.round(w * k)}px;height:${Math.round(h * k)}px`; };
+  const radio = (key, items) => `<div class="choice" data-key="${key}">${items.map((it) => `<button data-v="${esc(it.v)}" class="${String(s[key]) === String(it.v) ? "on" : ""}"><span class="dot"></span><span><b>${esc(it.b)}</b>${it.s ? `<small>${esc(it.s)}</small>` : ""}</span></button>`).join("")}</div>`;
+  show(`<div>
+    <h1 class="dev">Deine <em>Einstellungen</em></h1>
+    <p class="lead dev">Gelten für dich im Bildstudio-Bot – gespeichert wird beim PC.</p>
+
+    <div class="group dev"><div class="label">Ergebnisse</div><div class="rows">
+      <div class="srow"><div class="head"><div class="txt"><b>Mehrere Bilder</b><small>Varianten, Ideen, Roulette</small></div></div>
+        ${radio("d", [{ v: "einzeln", b: "Einzeln, sobald fertig", s: "Jedes Bild kommt sofort – du musst nicht warten" },
+                      { v: "gesammelt", b: "Alle zusammen am Ende", s: "Ein Album, wenn das letzte fertig ist" }])}</div>
+      <div class="srow"><div class="head"><div class="txt"><b>Als Datei senden</b><small>Volle Qualität statt komprimiertem Telegram-Foto</small></div>
+        <input type="checkbox" class="switch" data-key="file" ${s.file ? "checked" : ""}></div></div>
+    </div></div>
+
+    <div class="group dev"><div class="label">Standard für neue Bilder</div><div class="rows">
+      ${models.length ? `<div class="srow"><div class="head"><div class="txt"><b>Bildmodell</b></div></div>
+        ${radio("m", models.map((x, i) => ({ v: i === 0 && !s.m ? "" : x.id, b: x.n + (i === 0 ? " · Standard" : ""), s: x.h })))}</div>` : ""}
+      <div class="srow"><div class="head"><div class="txt"><b>Qualität</b></div></div>
+        <div class="seg" data-key="ql">${quals.map((q) => `<button data-v="${esc(q.id)}" class="${s.ql === q.id ? "on" : ""}">${esc(q.n)}</button>`).join("")}</div></div>
+      ${fmts.length ? `<div class="srow"><div class="head"><div class="txt"><b>Format</b></div></div>
+        <div class="formats" data-key="f">${fmts.map((f) => `<button class="fmt ${s.f === f.id ? "on" : ""}" data-v="${esc(f.id)}"><span class="shape" style="${ratio(f.w, f.h)}"></span><b>${esc(f.id)}</b><small>${esc(f.n)}</small></button>`).join("")}</div></div>` : ""}
+    </div></div>
+
+    <div class="group dev"><div class="label">Text im Chat</div><div class="rows">
+      <div class="srow"><div class="head"><div class="txt"><b>Sofort erstellen</b><small>Ohne Auswahl von Anzahl und Stil vorher</small></div>
+        <input type="checkbox" class="switch" data-key="quick" ${s.quick ? "checked" : ""}></div>
+        <div class="fold ${s.quick ? "" : "shut"}" id="fold"><div class="seg" data-key="n">${Array.from({ length: maxN }, (_, i) => i + 1).map((n) => `<button data-v="${n}" class="${+s.n === n ? "on" : ""}">${n} ${n === 1 ? "Bild" : "Bilder"}</button>`).join("")}</div></div></div>
+    </div></div>
+
+    <div class="group dev"><div class="label">Dein Konto</div><div class="rows"><div class="account">
+      <div><b>${esc(s.max)}</b><small>Bilder pro Idee</small></div>
+      <div><b>${s.limit ? esc(s.limit) : "∞"}</b><small>Aufträge pro Tag</small></div>
+    </div></div></div></div>`, () => {
+    // the model row: the first (standard) model stands for "" (no own choice)
+    const first = models[0] && models[0].id;
+    view.querySelectorAll("[data-key]").forEach((box) => {
+      const key = box.dataset.key;
+      if (box.classList.contains("switch")) {
+        box.addEventListener("change", () => {
+          s[key] = box.checked; buzz("medium");
+          if (key === "quick") $("#fold").classList.toggle("shut", !box.checked);
+        });
+        return;
+      }
+      box.addEventListener("click", (e) => {
+        const b = e.target.closest("button"); if (!b) return;
+        let v = b.dataset.v;
+        if (key === "n") v = +v;
+        if (key === "m" && v === first) v = "";
+        s[key] = v; buzz();
+        box.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      });
+    });
+    setGo("Einstellungen speichern", () => {
+      try { if (inTelegram && tg.CloudStorage) tg.CloudStorage.setItem("prefs", JSON.stringify(s)); } catch (e) { /* not stored */ }
+      send({ t: "settings", ql: s.ql, f: s.f, m: s.m, d: s.d, file: !!s.file, quick: !!s.quick, n: +s.n || 1 }, "Einstellungen gespeichert");
+    });
   });
 }
 

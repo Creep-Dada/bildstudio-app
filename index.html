@@ -33,6 +33,8 @@
   --text: #0c0c0e; --muted: #5c5c66; --faint: #8b8b95;
   --red: #e8164a; --cyan: #08988e; --ring: 0 0 0 3px rgba(8,152,142,.2);
 }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; background: var(--bg); }
 body { margin: 0; min-height: 100vh; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans);
@@ -273,6 +275,10 @@ body.dock-on .sheet-scroll { padding-bottom: calc(100px + env(safe-area-inset-bo
 .fold > div { overflow: hidden; min-height: 0; }
 .fold > div > .seg { margin-top: 12px; }
 .fold.shut { grid-template-rows: 0fr; opacity: 0; }
+.fold > div > .row { border-top: 1px solid var(--line); }
+.time { flex: none; height: 38px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--elev-2); color: var(--text);
+  font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color-scheme: inherit; }
+.row .field textarea { min-height: 110px; font-size: 15px; padding-bottom: 14px; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; }
 .stats > div { padding: 14px 15px; }
 .stats > div + div { border-left: 1px solid var(--line); }
@@ -976,6 +982,7 @@ function settings() {
   const s = Object.assign({}, PREFS);
   const maxN = (MENU && MENU.variants) || 4;
   const first = MODELS[0] && MODELS[0].id;
+  const dy = PREFS.dy ? Object.assign({}, PREFS.dy) : null;   // 🌅 only in the owner's link
   render(`<div>
     <h1>Einstellungen</h1>
     <p class="lead">Gelten für dich bei PikTscha – gespeichert wird auf dem PC.</p>
@@ -1001,6 +1008,22 @@ function settings() {
         <div class="fold${s.quick ? "" : " shut"}" id="fold"><div>${seg("sn", Array.from({ length: maxN }, (_, i) => ({ v: i + 1, n: plural(i + 1, "Bild", "Bilder") })), s.n)}</div></div></div>
     </div></div>
 
+    ${dy ? `<div class="group"><div class="label">Bild des Tages</div><div class="rows">
+      <div class="row"><div class="row-head"><div class="txt"><b>Jeden Morgen ein Bild</b><small>Ein neues Motiv, direkt in den Chat</small></div>
+        <input type="checkbox" class="switch" id="dyon" aria-label="Bild des Tages" ${dy.on ? "checked" : ""}></div></div>
+      <div class="fold${dy.on ? "" : " shut"}" id="dyfold"><div>
+        <div class="row"><div class="row-head"><div class="txt"><b>Uhrzeit</b></div>
+          <input type="time" class="time" id="dytime" value="${esc(dy.time)}"></div></div>
+        <div class="row"><div class="row-head"><div class="txt"><b>Motiv</b></div></div>
+          <div class="body">${options("dysrc", [{ v: "liste", b: "Aus meiner Liste", s: "Jeden Tag das nächste – der Reihe nach" },
+                                               { v: "ki", b: "Die KI überrascht mich", s: "Jeden Tag ein neues Motiv, deine Liste gibt nur die Richtung" }], dy.src)}</div></div>
+        <div class="row"><div class="row-head"><div class="txt"><b id="dylabel">${dy.src === "ki" ? "Richtung (optional)" : "Deine Motive"}</b><small>Eins pro Zeile – leer = die Standardliste</small></div></div>
+          <div class="body"><div class="field"><textarea id="dythemes" maxlength="12000" placeholder="z. B. Ein Leuchtturm im Sturm, Fotografie">${esc((dy.themes || []).join("\n"))}</textarea></div></div></div>
+        <div class="row"><div class="row-head"><div class="txt"><b>Format</b></div></div><div class="body">${formats("dyf", dy.f)}</div></div>
+        <div class="row"><div class="row-head"><div class="txt"><b>Qualität</b></div></div><div class="body">${seg("dyq", qualityItems(), dy.q)}</div></div>
+      </div></div>
+    </div></div>` : ""}
+
     <div class="group"><div class="label">Dein Konto</div><div class="rows"><div class="stats">
       <div><b>${esc(s.max)}</b><small>Bilder pro Idee</small></div>
       <div><b>${s.limit ? esc(s.limit) : "∞"}</b><small>Aufträge pro Tag</small></div>
@@ -1012,9 +1035,21 @@ function settings() {
     pick($("#sn"), (v) => { s.n = +v; });
     $("#sfile").addEventListener("change", (e) => { s.file = e.target.checked; haptic.tap(); });
     $("#squick").addEventListener("change", (e) => { s.quick = e.target.checked; haptic.tap(); $("#fold").classList.toggle("shut", !s.quick); });
+    if (dy) {
+      $("#dyon").addEventListener("change", (e) => { dy.on = e.target.checked; haptic.tap(); $("#dyfold").classList.toggle("shut", !dy.on); });
+      $("#dytime").addEventListener("change", (e) => { if (/^\d\d:\d\d$/.test(e.target.value)) dy.time = e.target.value; });
+      pick($("#dysrc"), (v) => { dy.src = v; $("#dylabel").textContent = v === "ki" ? "Richtung (optional)" : "Deine Motive"; });
+      pick($("#dyf"), (v) => { dy.f = v; });
+      pick($("#dyq"), (v) => { dy.q = v; });
+    }
     setGo("Einstellungen speichern", () => {
       try { if (inTelegram && tg.CloudStorage) tg.CloudStorage.setItem("prefs", JSON.stringify(s)); } catch (e) { /* not stored */ }
-      send({ t: "settings", ql: s.ql, f: s.f, m: s.m, d: s.d, file: !!s.file, quick: !!s.quick, n: +s.n || 1 }, "Einstellungen gespeichert");
+      const order = { t: "settings", ql: s.ql, f: s.f, m: s.m, d: s.d, file: !!s.file, quick: !!s.quick, n: +s.n || 1 };
+      if (dy) {
+        const themes = $("#dythemes").value.split("\n").map((x) => x.trim()).filter(Boolean);
+        order.dy = { on: !!dy.on, time: dy.time, src: dy.src, f: dy.f, q: dy.q, themes };
+      }
+      send(order, "Einstellungen gespeichert");
     });
   });
 }

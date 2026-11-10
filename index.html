@@ -793,23 +793,69 @@ $("#sheetX").addEventListener("click", () => closeSheet());
 
 /* ================= create: a picture from words ================= */
 const made = { prompt: "", f: FORMATS.some((f) => f.id === PREFS.f) ? PREFS.f : FORMATS[0].id, n: 1 };
+let shots = [];   // 📮 photos chosen in „Erstellen“ – then the text edits them instead of making a new picture
 function create() {
-  setCtx("Text → Bild");
-  const maxN = (MENU && MENU.variants) || 4;
+  const maxN = (MENU && MENU.variants) || 4, MAX_SHOTS = 6;
   render(`<div>
-    <h1>Beschreib dein <em>Bild</em>.</h1>
-    <p class="lead">Ein Satz reicht – je genauer, desto näher an deiner Vorstellung.</p>
-    <div class="field"><textarea id="pr" maxlength="2000" placeholder="z. B. Ein Fuchs im verschneiten Wald bei Sonnenaufgang, Fotografie">${esc(made.prompt)}</textarea></div>
-    <div class="label">Format</div>${formats("cf", made.f)}
+    <h1 id="ch">Beschreib dein <em>Bild</em>.</h1>
+    <p class="lead" id="cl"></p>
+    ${BOX ? `<div class="picks" id="shots"></div><input type="file" id="shotfile" accept="image/*" multiple hidden>` : ""}
+    <div class="field" style="margin-top:${BOX ? 12 : 0}px"><textarea id="pr" maxlength="2000">${esc(made.prompt)}</textarea></div>
+    <div id="newonly">
+      <div class="label">Format</div>${formats("cf", made.f)}
+    </div>
     <div class="label">Qualität</div>${seg("cq", qualityItems(), quality)}
-    <div class="label">Wie viele?</div>${seg("cn", Array.from({ length: maxN }, (_, i) => ({ v: i + 1, n: String(i + 1) })), made.n)}
-    <p class="note" style="margin-top:14px">Mehrere Bilder kommen ${PREFS.d === "gesammelt" ? "zusammen am Ende" : "einzeln, sobald jedes fertig ist"} – ändern unter Einstellungen.</p></div>`, () => {
-    const pr = $("#pr");
+    <div id="newonly2">
+      <div class="label">Wie viele?</div>${seg("cn", Array.from({ length: maxN }, (_, i) => ({ v: i + 1, n: String(i + 1) })), made.n)}
+      <p class="note" style="margin-top:14px">Mehrere Bilder kommen ${PREFS.d === "gesammelt" ? "zusammen am Ende" : "einzeln, sobald jedes fertig ist"} – ändern unter Einstellungen.</p>
+    </div></div>`, () => {
+    const pr = $("#pr"), box = $("#shots"), input = $("#shotfile");
+    const editing = () => shots.length > 0;
     const update = () => {
       made.prompt = pr.value;
-      setGo(made.n > 1 ? `${made.n} Bilder erstellen` : "Bild erstellen",
-        () => send({ t: "t2i", prompt: pr.value.trim(), f: made.f, q: quality, n: made.n }, "Dein Bild ist unterwegs"), pr.value.trim().length >= 3);
+      const text = pr.value.trim();
+      setCtx(editing() ? "Foto bearbeiten" : "Text → Bild");
+      $("#ch").innerHTML = editing() ? "Was soll <em>anders</em> werden?" : "Beschreib dein <em>Bild</em>.";
+      $("#cl").textContent = editing()
+        ? "Beschreib die Änderung – oder lass das Feld leer und such dir im Chat einen Effekt aus."
+        : (BOX ? "Ein Satz reicht. Oder oben ein Foto wählen und es bearbeiten lassen." : "Ein Satz reicht – je genauer, desto näher an deiner Vorstellung.");
+      pr.placeholder = editing() ? "z. B. Mach den Himmel dramatisch, Sonnenuntergang" : "z. B. Ein Fuchs im verschneiten Wald bei Sonnenaufgang, Fotografie";
+      $("#newonly").classList.toggle("hidden", editing()); $("#newonly2").classList.toggle("hidden", editing());
+      if (box) {
+        box.innerHTML = shots.map((p, i) => `<div class="pick"><img src="${p.url}" alt=""><i>${i + 1}</i>
+            <button class="unpick" data-i="${i}" aria-label="Foto ${i + 1} entfernen">${ICON.x}</button></div>`).join("")
+          + (shots.length < MAX_SHOTS ? `<button class="pick add" id="addshot">${ICON.camera}<span>${shots.length ? "Noch eins" : "Foto wählen"}</span></button>` : "");
+      }
+      if (editing()) setGo(text ? "Foto bearbeiten" : "Foto schicken · Effekt wählen", sendShots);
+      else setGo(made.n > 1 ? `${made.n} Bilder erstellen` : "Bild erstellen",
+        () => send({ t: "t2i", prompt: text, f: made.f, q: quality, n: made.n }, "Dein Bild ist unterwegs"), text.length >= 3);
     };
+    const sendShots = async () => {
+      const prompt = pr.value.trim();
+      goBusy("Wird vorbereitet …");
+      try {
+        const files = [];
+        for (const one of shots) files.push(await shrink(one.file));
+        const id = await boxUpload(files, (x) => goBusy(`Hochladen … ${Math.round(x * 100)} %`));
+        goIdle();
+        send({ t: "edit", prompt, q: quality, box: id }, prompt ? "Dein Foto wird bearbeitet" : "Dein Foto ist im Chat – such dir dort einen Effekt aus");
+        shots.forEach((s) => URL.revokeObjectURL(s.url)); shots = [];
+      } catch (e) { goIdle(); haptic.tap("heavy"); toast(e.message || "Hochladen ging nicht"); update(); }
+    };
+    if (box) {
+      box.addEventListener("click", (e) => {
+        const un = e.target.closest(".unpick");
+        if (un) { const [gone] = shots.splice(+un.dataset.i, 1); URL.revokeObjectURL(gone.url); haptic.pick(); update(); return; }
+        if (e.target.closest("#addshot")) input.click();
+      });
+      input.addEventListener("change", () => {
+        const room = MAX_SHOTS - shots.length;
+        [...input.files].filter((x) => x.type.startsWith("image/") || !x.type).slice(0, room)
+          .forEach((file) => shots.push({ file, url: URL.createObjectURL(file) }));
+        if (input.files.length > room) toast(`Höchstens ${MAX_SHOTS} Fotos auf einmal`);
+        input.value = ""; haptic.tap(); update();
+      });
+    }
     pr.addEventListener("input", update);
     pick($("#cf"), (v) => { made.f = v; });
     pick($("#cq"), (v) => { quality = v; });

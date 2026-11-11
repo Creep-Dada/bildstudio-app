@@ -390,6 +390,12 @@ body.dock-on .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
 .mcard img.in { opacity: 1; }
 .mcard .emo { position: absolute; inset: 0; display: grid; place-items: center; font-size: 30px; }
 .mcard:active { transform: scale(.95); }
+.mcard .who { position: absolute; left: 6px; top: 6px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px;
+  background: rgba(0,0,0,.6); color: #fff; }
+.more { display: block; width: 100%; margin-top: 12px; padding: 13px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg2);
+  font-weight: 650; transition: transform .4s var(--spring); }
+.more:active { transform: scale(.97); }
+.viewer .vclose { height: 44px; border-radius: 14px; color: rgba(255,255,255,.7); font-weight: 600; }
 .mcard .kind { position: absolute; left: 6px; bottom: 6px; font-size: 13px; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
 .mcard .sel { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
   background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.85); }
@@ -1147,31 +1153,6 @@ function dropIdea() {
   if (window.confirm("Diese Idee verwerfen?")) yes();
 }
 
-/* ---------- „Mehr“: the bot's chat commands, from here (the answer comes in the chat) ---------- */
-const COMMANDS = [
-  { c: "hilfe", i: "❔", b: "Hilfe", s: "Was PikTscha alles kann" },
-  { c: "status", i: "📊", b: "Status", s: "Warteschlange und Grafikkarte" },
-  { c: "cancel", i: "🛑", b: "Alles abbrechen", s: "Deine wartenden und laufenden Aufträge", ask: "Alle deine Aufträge abbrechen?" },
-  { c: "neuerfilter", i: "🧪", b: "Eigener Filter", s: "Einen neuen Effekt im Chat anlegen" },
-  { c: "figur", i: "👤", b: "Figuren", s: "Eigene Figuren anlegen und verwalten" },
-  { c: "seed", i: "🎲", b: "Seed", s: "Zufall oder fester Startwert" },
-  { c: "vorschau", i: "🖼️", b: "Vorschaubilder", s: "Fehlende Effekt-Vorschauen erzeugen", own: true },
-  { c: "reload", i: "🔄", b: "Filterkatalog neu laden", s: "Nach Änderungen an den Filtern", own: true },
-];
-function runCommand(cmd) {
-  if (!cmd) return;
-  const go = () => {
-    haptic.tap();
-    if (!BOX) { send({ t: "cmd", c: cmd.c }, "Gesendet"); return; }
-    dispatch({ t: "cmd", c: cmd.c }, { quiet: true }).then((trip) => trip && toast("Die Antwort kommt im Chat"));
-  };
-  if (cmd.ask) {
-    if (inTelegram && tg.showConfirm) { try { tg.showConfirm(cmd.ask, (ok) => ok && go()); return; } catch (e) { /* older client */ } }
-    if (!window.confirm(cmd.ask)) return;
-  }
-  go();
-}
-
 /* ================= settings: sent to the bot, which keeps them; the bot puts the current ones in the link ================= */
 function settings() {
   setCtx("Einstellungen");
@@ -1220,16 +1201,10 @@ function settings() {
       </div></div>
     </div></div>` : ""}
 
-    <div class="group"><div class="label">Mehr</div><div class="rows">${COMMANDS.filter((c) => !c.own || PREFS.own).map((c) =>
-      `<button class="row cmd" data-cmd="${c.c}"><span class="ic">${c.i}</span><span class="row-head"><span class="txt"><b>${c.b}</b><small>${c.s}</small></span></span>
-        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>`).join("")}
-    </div></div>
-
     <div class="group"><div class="label">Dein Konto</div><div class="rows"><div class="stats">
       <div><b>${esc(s.max)}</b><small>Bilder pro Idee</small></div>
       <div><b>${s.limit ? esc(s.limit) : "∞"}</b><small>Aufträge pro Tag</small></div>
     </div></div></div></div>`, () => {
-    $$("[data-cmd]").forEach((b) => b.addEventListener("click", () => runCommand(COMMANDS.find((c) => c.c === b.dataset.cmd))));
     pick($("#sd"), (v) => { s.d = v; });
     pick($("#sm"), (v) => { s.m = v === first ? "" : v; });   // the standard model stands for "" (no own choice)
     pick($("#sql"), (v) => { s.ql = v; });
@@ -1325,7 +1300,7 @@ function watchTrips() {
         if (FINAL_STATES.includes(x.s) && !x.end) {
           x.end = Date.now();
           if (x.s === "done" && !x.quiet) haptic.ok();
-          if (tab === "mine") setTimeout(() => tab === "mine" && loadGallery(99), 1500);
+          lib.loaded = false;   // „Meine Bilder“ loads anew next time
         }
         if (x.kind === "idea" && st.d && !x.used) await questionsArrived(x, st.d);
         if (changed) { saveTrips(); paintTrips(); }
@@ -1349,76 +1324,79 @@ async function questionsArrived(x, data) {
   } catch (e) { toast("Die Fragen konnten nicht geöffnet werden – schick /hilfe und öffne die App neu"); }
 }
 
-/* ================= 🖼️ Meine Bilder: what you made, encrypted by the PC for you; delete for good ================= */
-const gal = { items: null, select: false, chosen: new Set(), urls: new Map() };
+/* ================= 🖼️ Meine Bilder: like CutForge's media library – the page asks, the PC answers with what is
+   still on its disk (encrypted for this user); view, „In den Chat“, delete for good ================= */
+const lib = { items: [], more: false, pg: 0, loading: false, loaded: false, err: "", admin: false, select: false, chosen: new Set() };
+async function ask(order) {   // an order whose answer the page needs (not shown in the strip)
+  const up = await boxUpload(order, [], () => {});
+  for (let i = 0; ; i++) {
+    const st = await boxCall("GET", `/st/${up.id}`, { token: up.token });
+    if (FINAL_STATES.includes(st.s)) {
+      if (st.s !== "done") throw new Error(st.x || "Das ging nicht.");
+      if (!st.r) return st;
+      const r = await fetch(BOX.url.replace(/\/+$/, "") + `/st/${up.id}/res`, { headers: { "X-Up-Token": up.token } });
+      if (!r.ok) throw new Error("Die Antwort kam nicht an.");
+      return JSON.parse(new TextDecoder().decode(await openForMe(new Uint8Array(await r.arrayBuffer()), `res:${up.id}`)));
+    }
+    if (i > 100) throw new Error(st.pc !== null && st.pc > 90 ? "Dein PC antwortet gerade nicht – läuft Bildstudio?" : "Keine Antwort vom PC.");
+    await new Promise((ok) => setTimeout(ok, i < 10 ? 700 : 1500));
+  }
+}
 function mine() {
   setCtx("Meine Bilder");
   if (!BOX || !VIEW_RAW) {
-    render(`<div><h1>Meine <em>Bilder</em></h1><p class="lead">Schick einmal /hilfe im Chat und öffne die App über den Knopf neu – dann siehst du hier alles, was du erstellt hast.</p></div>`);
+    render(`<div><h1>Meine <em>Bilder</em></h1><p class="lead">Öffne die App über <b>Studio</b> links neben dem Eingabefeld – dann siehst du hier alles, was du erstellt hast.</p></div>`);
     return;
   }
-  gal.select = false; gal.chosen.clear();
-  render(`<div><div class="mine-head"><h1>Meine <em>Bilder</em></h1><button class="link" id="sel">Auswählen</button></div>
-    <p class="lead" id="mnote">Wird geladen …</p><div class="grid mine" id="mgrid"></div></div>`, () => {
-    $("#sel").addEventListener("click", () => { gal.select = !gal.select; gal.chosen.clear(); haptic.pick(); paintGallery(); });
+  lib.select = false; lib.chosen.clear();
+  render(`<div><div class="mine-head"><h1>Meine <em>Bilder</em></h1><button class="link" id="sel">Auswählen</button><button class="link" id="reload">Neu laden</button></div>
+    <p class="lead" id="mnote"></p><div class="grid mine" id="mgrid"></div><div id="mmore"></div></div>`, () => {
+    $("#sel").addEventListener("click", () => { lib.select = !lib.select; lib.chosen.clear(); haptic.pick(); paintLib(); });
+    $("#reload").addEventListener("click", () => { haptic.tap(); loadLib(0); });
     $("#mgrid").addEventListener("click", (e) => {
       const c = e.target.closest(".mcard"); if (!c) return;
       const id = +c.dataset.i;
-      if (gal.select) { if (gal.chosen.has(id)) gal.chosen.delete(id); else gal.chosen.add(id); haptic.pick(); paintGallery(); return; }
-      openViewer(gal.items.find((it) => it.i === id));
+      if (lib.select) { if (lib.chosen.has(id)) lib.chosen.delete(id); else lib.chosen.add(id); haptic.pick(); paintLib(); return; }
+      openViewer(lib.items.find((it) => it.i === id));
     });
-    if (gal.items) paintGallery();
-    loadGallery(0);
+    $("#mmore").addEventListener("click", (e) => { if (e.target.closest("button")) loadLib(lib.pg + 1); });
+    paintLib();
+    if (!lib.loaded) loadLib(0);
   });
 }
-async function loadGallery(round) {
+async function loadLib(pg) {
+  if (lib.loading) return;
+  lib.loading = true; lib.err = "";
+  if (tab === "mine") paintLib();
   try {
-    const r = await boxCall("GET", "/gal");
-    if (!r.index) {
-      if ($("#mnote")) $("#mnote").textContent = r.pc !== null && r.pc > 120 ? "Dein PC ist gerade nicht erreichbar – Bildstudio läuft nicht." : "Dein PC stellt deine Bilder gerade bereit …";
-      if (round < 10) setTimeout(() => tab === "mine" && loadGallery(round + 1), 3000);
-      return;
-    }
-    const data = JSON.parse(new TextDecoder().decode(await openForMe(unb64(r.index), "gal:index")));
-    gal.items = data.items || [];
-    if (tab === "mine") paintGallery();
-    if (round === 0) setTimeout(() => tab === "mine" && !gal.select && loadGallery(99), 6000);   // the PC may just have added new ones
-  } catch (e) {
-    if ($("#mnote")) $("#mnote").textContent = e.message && e.status ? e.message : "Deine Bilder konnten nicht geladen werden – schick /hilfe und öffne die App neu.";
-  }
+    const a = await ask({ t: "list", pg });
+    lib.items = pg ? [...lib.items, ...a.items] : a.items;
+    Object.assign(lib, { more: !!a.more, pg, loaded: true, admin: !!a.admin });
+  } catch (e) { lib.err = e.message || "Laden ging nicht."; }
+  lib.loading = false;
+  if (tab === "mine") paintLib();
 }
-const KIND_ICON = { video: "🎥", model: "🧊", image: "" };
-function paintGallery() {
-  const grid = $("#mgrid"); if (!grid || !gal.items) return;
-  const n = gal.items.length;
-  $("#mnote").textContent = n ? (gal.select ? "Tippe an, was weg soll." : `${plural(n, "Ergebnis", "Ergebnisse")} – antippen zum Ansehen.`) : "Noch nichts erstellt – leg los!";
-  $("#sel").textContent = gal.select ? "Fertig" : "Auswählen";
+const KIND_ICON = { video: "🎥", model: "🧊", image: "🖼️" };
+const mb = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+const libDate = (d) => { const x = new Date(d); return isNaN(x) ? "" : x.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" }); };
+function paintLib() {
+  const grid = $("#mgrid"); if (!grid) return;
+  const n = lib.items.length;
+  const what = lib.admin ? "Alles, was auf dem PC liegt" : "Alles, was du erstellt hast und noch auf dem PC liegt";
+  $("#mnote").textContent = lib.err ? lib.err : lib.loading && !n ? "Dein PC sucht deine Bilder heraus …"
+    : !lib.loaded ? "" : !n ? "Noch nichts da – leg los!" : lib.select ? "Tippe an, was weg soll." : `${what}. Antippen zum Ansehen, Schicken oder Löschen.`;
+  $("#sel").textContent = lib.select ? "Fertig" : "Auswählen";
   $("#sel").classList.toggle("hidden", !n);
-  grid.innerHTML = gal.items.map((it) => `<button class="card mcard${gal.chosen.has(it.i) ? " on" : ""}" data-i="${it.i}">
-      ${it.n ? `<img data-n="${esc(it.n)}" alt="">` : `<span class="emo">${KIND_ICON[it.k] || "🖼️"}</span>`}
-      ${it.n && KIND_ICON[it.k] ? `<span class="kind">${KIND_ICON[it.k]}</span>` : ""}
-      ${gal.select ? `<span class="sel">${ICON.check}</span>` : ""}</button>`).join("");
-  const io = "IntersectionObserver" in window ? new IntersectionObserver((list) => list.forEach((en) => {
-    if (en.isIntersecting) { io.unobserve(en.target); loadThumb(en.target); }
-  }), { rootMargin: "300px" }) : null;
-  $$("img[data-n]", grid).forEach((img) => (io ? io.observe(img) : loadThumb(img)));
-  if (gal.select) {
-    const k = gal.chosen.size;
-    setGo(k ? `${plural(k, "Bild", "Bilder")} endgültig löschen` : "Bilder antippen", () => deleteChosen([...gal.chosen]), k > 0);
+  grid.innerHTML = lib.items.map((it) => `<button class="mcard${lib.chosen.has(it.i) ? " on" : ""}" data-i="${it.i}">
+      ${it.th ? `<img class="in" src="data:image/webp;base64,${it.th}" alt="" loading="lazy">` : `<span class="emo">${KIND_ICON[it.k] || "🖼️"}</span>`}
+      ${it.th && it.k !== "image" ? `<span class="kind">${KIND_ICON[it.k]}</span>` : ""}
+      ${it.u ? `<span class="who">${esc(it.u)}</span>` : ""}
+      ${lib.select ? `<span class="sel">${ICON.check}</span>` : ""}</button>`).join("");
+  $("#mmore").innerHTML = lib.loading && n ? '<p class="empty">Lädt …</p>' : lib.more && !lib.select ? '<button class="more">Mehr laden</button>' : "";
+  if (lib.select) {
+    const k = lib.chosen.size;
+    setGo(k ? `${plural(k, "Bild", "Bilder")} endgültig löschen` : "Bilder antippen", () => deleteChosen([...lib.chosen]), k > 0);
   } else hideGo();
-}
-async function loadThumb(img) {
-  const name = img.dataset.n;
-  try {
-    if (!gal.urls.has(name)) {
-      const r = await fetch(BOX.url.replace(/\/+$/, "") + "/gal/" + encodeURIComponent(name), { headers: { "X-Ticket": TICKET } });
-      if (!r.ok) return;
-      const plain = await openForMe(new Uint8Array(await r.arrayBuffer()), "gal:" + name);
-      gal.urls.set(name, URL.createObjectURL(new Blob([plain], { type: "image/webp" })));
-    }
-    img.src = gal.urls.get(name);
-    if (img.complete) img.classList.add("in"); else img.addEventListener("load", () => img.classList.add("in"), { once: true });
-  } catch (e) { /* stays empty */ }
 }
 function confirmDelete(count, yes) {
   const text = `${plural(count, "Bild", "Bilder")} endgültig löschen? Es wird auch auf dem PC gelöscht (nicht im Papierkorb) – das geht nicht rückgängig.`;
@@ -1427,28 +1405,38 @@ function confirmDelete(count, yes) {
 }
 function deleteChosen(ids) {
   confirmDelete(ids.length, async () => {
-    const trip = await dispatch({ t: "delete", ids }, { quiet: true });
-    if (!trip) return;
-    gal.items = gal.items.filter((it) => !ids.includes(it.i));
-    gal.chosen.clear(); gal.select = false; closeViewer();
-    toast(`${plural(ids.length, "Bild", "Bilder")} gelöscht – auch auf dem PC`);
-    if (tab === "mine") paintGallery();
+    goBusy("Wird gelöscht …");
+    try {
+      await ask({ t: "delete", ids });
+      lib.items = lib.items.filter((it) => !ids.includes(it.i));
+      lib.chosen.clear(); lib.select = false; closeViewer();
+      haptic.ok(); toast(`${plural(ids.length, "Bild", "Bilder")} gelöscht – auch auf dem PC`);
+    } catch (e) { toast(e.message || "Löschen ging nicht"); }
+    goIdle();
+    if (tab === "mine") paintLib();
   });
 }
 function openViewer(it) {
   if (!it) return;
   const v = $("#viewer");
-  v.innerHTML = `${it.n && gal.urls.get(it.n) ? `<img src="${gal.urls.get(it.n)}" alt="">` : `<div class="emo" style="font-size:80px;text-align:center">${KIND_ICON[it.k] || "🖼️"}</div>`}
-    <p>${esc(it.t || "Ohne Titel")}<br><small>${esc((it.d || "").replace("T", " · "))}${it.c > 1 ? ` · ${it.c} Dateien` : ""}</small></p>
-    <div class="row2"><button class="del" id="vdel">Löschen</button><button id="vclose">Schließen</button></div>`;
+  const info = [libDate(it.d), it.c > 1 ? `${it.c} Dateien` : "", it.sz ? mb(it.sz) : "", it.u || ""].filter(Boolean).join(" · ");
+  v.innerHTML = `${it.th ? `<img src="data:image/webp;base64,${it.th}" alt="">` : `<div class="emo" style="font-size:80px;text-align:center">${KIND_ICON[it.k] || "🖼️"}</div>`}
+    <p>${esc(it.t || "Ohne Titel")}<br><small>${esc(info)}</small></p>
+    <div class="row2"><button id="vsend">In den Chat</button><button class="del" id="vdel">Löschen</button></div>
+    <button class="vclose" id="vclose">Schließen</button>`;
   v.classList.add("open");
   $("#vclose").addEventListener("click", closeViewer);
   $("#vdel").addEventListener("click", () => deleteChosen([it.i]));
+  $("#vsend").addEventListener("click", async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = "Wird geschickt …";
+    try { await ask({ t: "send", id: it.i }); b.textContent = "Im Chat ✓"; haptic.ok(); }
+    catch (err) { b.disabled = false; b.textContent = "In den Chat"; toast(err.message || "Das ging nicht"); }
+  });
   setBack(closeViewer); hideGo();
 }
 function closeViewer() {
   $("#viewer").classList.remove("open");
-  if (tab === "mine") { setBack(null); if (gal.select) paintGallery(); }
+  if (tab === "mine") { setBack(null); if (lib.select) paintLib(); }
 }
 $("#viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") closeViewer(); });
 

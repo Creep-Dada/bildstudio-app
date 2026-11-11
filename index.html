@@ -216,6 +216,52 @@ body.dock-on .sheet-scroll { padding-bottom: calc(100px + env(safe-area-inset-bo
 .inline-link { display: block; margin-top: 6px; color: var(--text); font-weight: 600; font-size: 13.5px; text-decoration: underline;
   text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 
+/* ---------- orders on their way: a calm strip under the tabs ---------- */
+.trips { display: grid; gap: 8px; margin: -8px 0 18px; }
+.trips:empty { display: none; }
+.trip { position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; padding: 11px 12px 13px 14px; border-radius: 14px;
+  background: var(--elev); box-shadow: inset 0 0 0 1px var(--line); }
+.trip .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.trip.live .dot { background: var(--cyan); box-shadow: 0 0 0 4px rgba(24,228,214,.18); animation: pulse 1.6s ease-in-out infinite; }
+.trip.ok .dot { background: #34c759; }
+.trip.bad .dot { background: var(--red); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(24,228,214,0); } }
+.trip .tx { flex: 1; min-width: 0; }
+.trip .tx b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip .tx span { display: block; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; }
+.trip .act { flex: none; height: 30px; padding: 0 12px; border-radius: 999px; background: var(--elev-2); font-size: 13px; font-weight: 600;
+  transition: transform 160ms var(--ease-out); }
+.trip .act:active { transform: scale(.95); }
+.trip .act.stop { color: var(--red); }
+.trip .bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brand); transform-origin: left;
+  transform: scaleX(var(--p, 0)); transition: transform 400ms var(--ease-out); }
+
+/* ---------- „Meine Bilder“ ---------- */
+.mine-head { display: flex; align-items: flex-end; gap: 12px; }
+.mine-head h1 { flex: 1; }
+.mine-head .link { margin-bottom: 10px; }
+.grid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mcard { border-radius: 12px; }
+.mcard .kind { position: absolute; left: 6px; bottom: 6px; font-size: 13px; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.mcard .sel { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0,0,0,.35); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.85); }
+.mcard .sel svg { width: 12px; height: 12px; color: #fff; opacity: 0; }
+.mcard.on .sel { background: var(--cyan); box-shadow: none; }
+.mcard.on .sel svg { opacity: 1; }
+.mcard.on img { transform: scale(.92); border-radius: 10px; }
+.mcard img { transition: opacity 300ms ease-out, transform 160ms var(--ease-out); }
+.viewer { position: fixed; inset: 0; z-index: 25; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 20px;
+  background: rgba(0,0,0,.88); opacity: 0; pointer-events: none; transition: opacity 200ms ease-out; }
+.viewer.open { opacity: 1; pointer-events: auto; }
+.viewer img { width: 100%; max-height: 66vh; object-fit: contain; border-radius: 14px; transform: scale(.97); transition: transform 240ms var(--ease-out); }
+.viewer.open img { transform: none; }
+.viewer p { margin: 0; color: #fff; font-size: 14.5px; }
+.viewer small { color: rgba(255,255,255,.6); }
+.viewer .row2 { display: flex; gap: 10px; }
+.viewer .row2 button { flex: 1; height: 46px; border-radius: 12px; background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
+.viewer .row2 .del { color: #ff6b81; }
+
 /* ---------- idea: how it works, the questions ---------- */
 .how { margin-top: 26px; display: grid; gap: 14px; }
 .how > div { display: flex; gap: 12px; align-items: flex-start; }
@@ -301,6 +347,8 @@ body.dock-on .sheet-scroll { padding-bottom: calc(100px + env(safe-area-inset-bo
 body.dock-on .toast { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
 .sent { text-align: center; padding: 48px 6px 0; }
 .sent .logo { width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 20px; }
+.think .logo { animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(.94); opacity: .75; } }
 .payload { margin-top: 22px; text-align: left; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted);
   border-radius: 14px; background: var(--elev-2); padding: 12px 14px; overflow-wrap: anywhere; }
 
@@ -327,6 +375,7 @@ body.dock-on .toast { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
     <span class="ctx" id="ctx"></span>
   </header>
   <nav class="tabs" id="tabs"></nav>
+  <div class="trips" id="trips"></div>
   <section id="view"></section>
 </main>
 <div class="scrim" id="scrim"></div>
@@ -336,6 +385,7 @@ body.dock-on .toast { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
   <div class="sheet-scroll" id="sheetScroll"></div>
 </section>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="viewer" id="viewer"></div>
 <div class="dock hidden" id="dock"><button class="go" id="go"></button></div>
 
 <script>
@@ -357,6 +407,7 @@ const ICON = {
   effects: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M11 4c.7 4.4 2.6 6.3 7 7-4.4.7-6.3 2.6-7 7-.7-4.4-2.6-6.3-7-7 4.4-.7 6.3-2.6 7-7z"/><path d="M19 3v3.5M17.25 4.75h3.5"/></svg>',
   idea: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/></svg>',
   create: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L15.5 5a2.12 2.12 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></svg>',
+  mine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8.5 8.5"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -399,7 +450,7 @@ function fromHash(key) {
   } catch (e) { return null; }
 }
 const PREFS = Object.assign({ ql: "normal", f: "1:1", m: "", d: "einzeln", file: false, quick: false, n: 1, max: 20, limit: null }, fromHash("s") || {});
-const IDEA = (() => { const p = fromHash("i"); return p && p.v === 2 && Array.isArray(p.q) && p.q.length ? p : null; })();
+let IDEA = (() => { const p = fromHash("i"); return p && p.v === 2 && Array.isArray(p.q) && p.q.length ? p : null; })();
 const FORMATS = (MENU && MENU.formats) || [{ id: "1:1", n: "Quadrat", w: 1, h: 1 }];
 const QUALITIES = (MENU && MENU.qualities) || [{ id: "normal", n: "Normal" }];
 const MODELS = (MENU && MENU.models) || [];
@@ -492,11 +543,11 @@ function pick(box, onPick) {   // one chosen button in a group
 const qualityItems = () => QUALITIES.map((q) => ({ v: q.id, n: q.n }));
 
 /* ================= tabs ================= */
-const TABS = [["effects", "Effekte"], ["idea", "Idee"], ["create", "Erstellen"], ["settings", ""]];
+const TABS = [["effects", "Effekte"], ["idea", "Idee"], ["create", "Erstellen"], ["mine", ""], ["settings", ""]];
 let tab = null;
 function buildTabs() {
   const row = (copy) => `<div class="tabs-row${copy ? " tabs-on" : ""}"${copy ? ' aria-hidden="true"' : ' role="tablist"'}>${TABS.map(([id, n]) =>
-    `<button${copy ? ' tabindex="-1"' : ` role="tab" data-tab="${id}"`} class="${n ? "" : "icon"}" aria-label="${n || "Einstellungen"}">${ICON[id]}${n ? `<span>${n}</span>` : ""}</button>`).join("")}</div>`;
+    `<button${copy ? ' tabindex="-1"' : ` role="tab" data-tab="${id}"`} class="${n ? "" : "icon"}" aria-label="${n || (id === "mine" ? "Meine Bilder" : "Einstellungen")}">${ICON[id]}${n ? `<span>${n}</span>` : ""}</button>`).join("")}</div>`;
   $("#tabs").innerHTML = row(false) + row(true);
 }
 function markTab(id, instant) {
@@ -512,7 +563,7 @@ function openTab(next) {
   const first = tab === null;
   tab = next;
   closeSheet(true); hideGo(); setBack(null); markTab(next, first);
-  ({ effects, idea, create, settings })[next]();
+  ({ effects, idea, create, mine, settings })[next]();
 }
 buildTabs();
 $("#tabs").addEventListener("click", (e) => {
@@ -632,14 +683,14 @@ async function shrink(file) {
     return { blob, name: (file.name || "foto").replace(/\.[^.]+$/, "") + (png ? ".png" : ".jpg") };
   } catch (e) { return { blob: file, name: file.name || "foto" }; }   // let the PC try (e.g. HEIC)
 }
-async function boxUpload(files, progress) {
+async function boxUpload(order, files, progress) {
   const pub = await crypto.subtle.importKey("spki", unb64(BOX.key), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
   const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
   const wk = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pub, await crypto.subtle.exportKey("raw", key));
   let n = 0;
   const list = files.map((f) => { const count = Math.max(1, Math.ceil(f.blob.size / PART)); const e = { name: f.name, size: f.blob.size, first: n, count }; n += count; return e; });
   const total = files.reduce((a, f) => a + f.blob.size, 0);
-  const man = await seal(key, new TextEncoder().encode(JSON.stringify({ v: 1, files: list })), "man");
+  const man = await seal(key, new TextEncoder().encode(JSON.stringify({ v: 2, order, files: list })), "man");
   const up = await boxCall("POST", "/up", { body: { wk: b64(wk), man: b64(man), parts: n, size: total } });
   const jobs = [];
   list.forEach((e, i) => { for (let j = 0; j < e.count; j++) jobs.push({ blob: files[i].blob, size: e.size, j, n: e.first + j }); });
@@ -657,7 +708,7 @@ async function boxUpload(files, progress) {
   };
   await Promise.all([0, 1, 2].map(async () => { while (next < jobs.length) await one(jobs[next++]); }));
   await boxCall("POST", `/up/${up.id}/done`, { token: up.token });
-  return up.id;
+  return up;
 }
 function goBusy(text) {   // the main button shows progress and takes no taps
   goAction = null;
@@ -720,19 +771,10 @@ function openSheet(f) {
     if (missing > 0) setGo(picked.length ? `Noch ${plural(missing, "Foto", "Fotos")} wählen` : (low > 1 ? `${low} Fotos wählen` : "Erst ein Foto wählen"), null, false);
     else setGo("Los · Effekt starten", start);
   };
-  const start = async () => {
-    const p = answers();
-    goBusy("Wird vorbereitet …");
-    try {
-      const files = [];
-      for (const one of picked) files.push(await shrink(one.file));
-      const id = await boxUpload(files, (x) => goBusy(`Hochladen … ${Math.round(x * 100)} %`));
-      goIdle();
-      send({ t: "filter", id: f.id, q: quality, p, box: id }, `${f.n} – unterwegs. Das Ergebnis kommt in den Chat.`);
-    } catch (e) {
-      goIdle(); haptic.tap("heavy");
-      toast(e.message || "Hochladen ging nicht"); paint();
-    }
+  const start = () => {
+    const files = picked.map((one) => one.file);
+    dispatch({ t: "filter", id: f.id, q: quality, p: answers() }, { files, title: `${f.e} ${f.n}` });
+    closeSheet(); toast("Unterwegs – den Stand siehst du oben");
   };
   box.addEventListener("click", (e) => {
     const un = e.target.closest(".unpick");
@@ -828,19 +870,18 @@ function create() {
       }
       if (editing()) setGo(text ? "Foto bearbeiten" : "Foto schicken · Effekt wählen", sendShots);
       else setGo(made.n > 1 ? `${made.n} Bilder erstellen` : "Bild erstellen",
-        () => send({ t: "t2i", prompt: text, f: made.f, q: quality, n: made.n }, "Dein Bild ist unterwegs"), text.length >= 3);
+        () => {
+          if (!BOX) { send({ t: "t2i", prompt: text, f: made.f, q: quality, n: made.n }, "Dein Bild ist unterwegs"); return; }
+          dispatch({ t: "t2i", prompt: text, f: made.f, q: quality, n: made.n }, { title: "🎨 " + text });
+          made.prompt = ""; pr.value = ""; update(); toast("Unterwegs – den Stand siehst du oben");
+        }, text.length >= 3);
     };
-    const sendShots = async () => {
+    const sendShots = () => {
       const prompt = pr.value.trim();
-      goBusy("Wird vorbereitet …");
-      try {
-        const files = [];
-        for (const one of shots) files.push(await shrink(one.file));
-        const id = await boxUpload(files, (x) => goBusy(`Hochladen … ${Math.round(x * 100)} %`));
-        goIdle();
-        send({ t: "edit", prompt, q: quality, box: id }, prompt ? "Dein Foto wird bearbeitet" : "Dein Foto ist im Chat – such dir dort einen Effekt aus");
-        shots.forEach((s) => URL.revokeObjectURL(s.url)); shots = [];
-      } catch (e) { goIdle(); haptic.tap("heavy"); toast(e.message || "Hochladen ging nicht"); update(); }
+      dispatch({ t: "edit", prompt, q: quality }, { files: shots.map((s) => s.file), title: prompt ? "✍️ " + prompt : "📷 Foto für einen Effekt" });
+      shots.forEach((s) => URL.revokeObjectURL(s.url)); shots = [];
+      made.prompt = ""; pr.value = ""; update();
+      toast(prompt ? "Unterwegs – den Stand siehst du oben" : "Im Chat wartet gleich das Effekt-Menü");
     };
     if (box) {
       box.addEventListener("click", (e) => {
@@ -867,7 +908,14 @@ function create() {
 /* ================= idea: tell it, answer a few questions, get a stack of pictures ================= */
 let draft = "", ideaDropped = false;
 function idea() {
-  if (IDEA && !ideaDropped) interview(0); else ideaHome();
+  if (IDEA && !ideaDropped) interview(0);
+  else if (trips.some((x) => x.kind === "idea" && !FINAL_STATES.includes(x.s) && x.s !== "questions")) thinking();
+  else ideaHome();
+}
+function thinking() {
+  setCtx("Ideen"); hideGo();
+  render(`<div class="sent"><div class="think">${$(".top .logo").outerHTML}</div><h2>Ich denke über deine Idee nach …</h2>
+    <p class="note">Die Fragen erscheinen gleich hier – das dauert meist eine halbe Minute.</p></div>`);
 }
 function ideaHome() {
   setCtx("Ideen");
@@ -884,7 +932,12 @@ function ideaHome() {
     const box = $("#idea"), len = $("#len");
     const update = () => {
       draft = box.value; len.textContent = box.value.length;
-      setGo("Idee senden", () => send({ t: "idea", idea: box.value.trim() }, "Deine Idee ist unterwegs"), box.value.trim().length >= 3);
+      setGo("Idee senden", () => {
+        const text = box.value.trim();
+        if (!BOX) { send({ t: "idea", idea: text }, "Deine Idee ist unterwegs"); return; }
+        dispatch({ t: "idea", idea: text }, { title: "💡 " + text });
+        draft = ""; thinking();
+      }, box.value.trim().length >= 3);
     };
     box.addEventListener("input", update);
     $("#ex").addEventListener("click", (e) => {
@@ -1012,12 +1065,21 @@ function interview(dir) {
     </dl></div>
     <p class="note" style="margin-top:14px">Ich schreibe daraus die Bildbeschreibungen und lege sofort los – die Bilder kommen in den Chat.</p></div>`, (el) => {
     wire(el);
-    setGo(`${plural(s.n, "Bild", "Bilder")} erstellen`, () => send({ t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n },
-      `${plural(s.n, "Bild", "Bilder")} – geht los`));
+    setGo(`${plural(s.n, "Bild", "Bilder")} erstellen`, () => {
+      const order = { t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n };
+      if (!BOX) { send(order, `${plural(s.n, "Bild", "Bilder")} – geht los`); return; }
+      dispatch(order, { title: `💡 ${p.title} · ${plural(s.n, "Bild", "Bilder")}` });
+      ideaDropped = true; IDEA = null; toast("Geht los – den Stand siehst du oben"); ideaHome();
+    });
   }, dir);
 }
 function dropIdea() {
-  const yes = () => { ideaDropped = true; send({ t: "drop", id: IDEA.id }, "Idee verworfen"); };
+  const yes = () => {
+    const id = IDEA.id;
+    ideaDropped = true;
+    if (!BOX) { send({ t: "drop", id }, "Idee verworfen"); return; }
+    dispatch({ t: "drop", id }, { quiet: true }); IDEA = null; toast("Idee verworfen"); ideaHome();
+  };
   if (inTelegram && tg.showConfirm) { try { tg.showConfirm("Diese Idee verwerfen?", (ok) => ok && yes()); return; } catch (e) { /* older client */ } }
   if (window.confirm("Diese Idee verwerfen?")) yes();
 }
@@ -1095,11 +1157,208 @@ function settings() {
         const themes = $("#dythemes").value.split("\n").map((x) => x.trim()).filter(Boolean);
         order.dy = { on: !!dy.on, time: dy.time, src: dy.src, f: dy.f, q: dy.q, themes };
       }
-      send(order, "Einstellungen gespeichert");
+      if (!BOX) { send(order, "Einstellungen gespeichert"); return; }
+      dispatch(order, { quiet: true }).then((trip) => trip && toast("Gespeichert"));
     });
   });
 }
 
+/* ================= 📮 orders on their way: sent through the Briefkasten, the app stays open ================= */
+const FINAL_STATES = ["done", "failed", "cancelled"];
+const LIVE_STATES = ["up", "sent", "picked", "thinking", "queued", "running"];
+const VIEW_RAW = (location.hash.match(/[#&]v=([A-Za-z0-9_-]+)/) || [])[1] || "";
+const fromB64url = (s) => unb64(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+let viewKey = null;
+async function openForMe(bytes, aad) {   // what the PC encrypted for this user (their view key from the link)
+  if (!viewKey) viewKey = await crypto.subtle.importKey("raw", fromB64url(VIEW_RAW), "AES-GCM", false, ["decrypt"]);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.slice(0, 12), additionalData: new TextEncoder().encode(aad) },
+    viewKey, bytes.slice(12)));
+}
+const TRIPS_KEY = "pk.trips";
+let trips = (() => {
+  try { return JSON.parse(localStorage.getItem(TRIPS_KEY) || "[]").filter((x) => x.id && Date.now() - x.t < 20 * 3600e3); } catch (e) { return []; }
+})();
+function saveTrips() {
+  try { localStorage.setItem(TRIPS_KEY, JSON.stringify(trips.filter((x) => x.id).slice(0, 20))); } catch (e) { /* private mode */ }
+}
+async function dispatch(order, { files = [], title = "", quiet = false } = {}) {
+  const trip = { key: `t${Date.now()}${Math.random()}`, id: null, token: null, title, kind: order.t, quiet, s: "up", x: "Wird gesendet …", p: 0, t: Date.now() };
+  trips.unshift(trip); paintTrips();
+  try {
+    const prepared = [];
+    for (const f of files) prepared.push(await shrink(f));
+    const up = await boxUpload(order, prepared, (x) => { trip.p = x; trip.x = files.length ? `Hochladen … ${Math.round(x * 100)} %` : "Wird gesendet …"; paintTrips(); });
+    Object.assign(trip, { id: up.id, token: up.token, s: "sent", x: "Im Briefkasten – dein PC holt ihn gleich ab", p: null });
+    haptic.ok(); saveTrips(); paintTrips(); watchTrips();
+    return trip;
+  } catch (e) {
+    Object.assign(trip, { s: "failed", x: e.message || "Senden ging nicht", p: null });
+    haptic.tap("heavy"); paintTrips();
+    if (quiet) toast(trip.x);
+    return null;
+  }
+}
+function tripClass(x) { return LIVE_STATES.includes(x.s) ? "live" : x.s === "done" || x.s === "questions" ? "ok" : "bad"; }
+function paintTrips() {
+  const shown = trips.filter((x) => !x.quiet && !x.gone && (!FINAL_STATES.includes(x.s) || Date.now() - (x.end || x.t) < 10 * 60e3)).slice(0, 4);
+  $("#trips").innerHTML = shown.map((x) => {
+    const live = LIVE_STATES.includes(x.s) && x.id && x.kind !== "idea" && x.kind !== "settings";
+    return `<div class="trip ${tripClass(x)}" data-k="${esc(x.key)}"><i class="dot"></i>
+      <div class="tx"><b>${esc(x.title || "Auftrag")}</b><span>${esc(x.x || "")}</span></div>
+      ${live ? '<button class="act stop">Stopp</button>' : FINAL_STATES.includes(x.s) ? '<button class="act ok" aria-label="Ausblenden">✕</button>' : ""}
+      ${typeof x.p === "number" ? `<i class="bar" style="--p:${x.p}"></i>` : ""}</div>`;
+  }).join("");
+}
+$("#trips").addEventListener("click", (e) => {
+  const card = e.target.closest(".trip"); if (!card) return;
+  const x = trips.find((y) => y.key === card.dataset.k); if (!x) return;
+  if (e.target.closest(".stop")) {
+    haptic.tap("medium"); x.x = "Wird gestoppt …"; paintTrips();
+    dispatch({ t: "cancel", item: x.id }, { quiet: true });
+  } else if (e.target.closest(".ok")) { x.gone = true; saveTrips(); paintTrips(); }
+});
+let watching = 0;
+function watchTrips() {
+  if (watching) return;
+  const tick = async () => {
+    const open = trips.filter((x) => x.id && (LIVE_STATES.includes(x.s) || (x.s === "questions" && !x.used)));
+    if (!open.length) { watching = 0; return; }
+    for (const x of open.slice(0, 6)) {
+      try {
+        const st = await boxCall("GET", `/st/${x.id}`, { token: x.token });
+        const changed = st.s !== x.s || st.x !== x.x || st.p !== x.p;
+        Object.assign(x, { s: st.s, x: st.x || x.x, p: typeof st.p === "number" ? st.p : null });
+        if (FINAL_STATES.includes(x.s) && !x.end) {
+          x.end = Date.now();
+          if (x.s === "done" && !x.quiet) haptic.ok();
+          if (tab === "mine") setTimeout(() => tab === "mine" && loadGallery(99), 1500);
+        }
+        if (x.kind === "idea" && st.d && !x.used) await questionsArrived(x, st.d);
+        if (changed) { saveTrips(); paintTrips(); }
+      } catch (e) {
+        if (e.status === 404) { x.s = "failed"; x.x = "Nicht mehr im Briefkasten"; x.end = Date.now(); saveTrips(); paintTrips(); }
+      }
+    }
+    watching = setTimeout(tick, 2000);
+  };
+  watching = setTimeout(tick, 1200);
+}
+async function questionsArrived(x, data) {
+  x.used = true;
+  try {
+    const plain = await openForMe(unb64(data), "st");
+    const payload = JSON.parse(new TextDecoder().decode(plain));
+    if (!payload || payload.v !== 2 || !Array.isArray(payload.q)) return;
+    IDEA = payload; ideaDropped = false; iv.step = 0; iv.s = null;
+    x.gone = true; haptic.ok(); toast("Deine Fragen sind da");
+    openTab("idea");
+  } catch (e) { toast("Die Fragen konnten nicht geöffnet werden – schick /hilfe und öffne die App neu"); }
+}
+
+/* ================= 🖼️ Meine Bilder: what you made, encrypted by the PC for you; delete for good ================= */
+const gal = { items: null, select: false, chosen: new Set(), urls: new Map() };
+function mine() {
+  setCtx("Meine Bilder");
+  if (!BOX || !VIEW_RAW) {
+    render(`<div><h1>Meine <em>Bilder</em></h1><p class="lead">Schick einmal /hilfe im Chat und öffne die App über den Knopf neu – dann siehst du hier alles, was du erstellt hast.</p></div>`);
+    return;
+  }
+  gal.select = false; gal.chosen.clear();
+  render(`<div><div class="mine-head"><h1>Meine <em>Bilder</em></h1><button class="link" id="sel">Auswählen</button></div>
+    <p class="lead" id="mnote">Wird geladen …</p><div class="grid mine" id="mgrid"></div></div>`, () => {
+    $("#sel").addEventListener("click", () => { gal.select = !gal.select; gal.chosen.clear(); haptic.pick(); paintGallery(); });
+    $("#mgrid").addEventListener("click", (e) => {
+      const c = e.target.closest(".mcard"); if (!c) return;
+      const id = +c.dataset.i;
+      if (gal.select) { if (gal.chosen.has(id)) gal.chosen.delete(id); else gal.chosen.add(id); haptic.pick(); paintGallery(); return; }
+      openViewer(gal.items.find((it) => it.i === id));
+    });
+    if (gal.items) paintGallery();
+    loadGallery(0);
+  });
+}
+async function loadGallery(round) {
+  try {
+    const r = await boxCall("GET", "/gal");
+    if (!r.index) {
+      if ($("#mnote")) $("#mnote").textContent = r.pc !== null && r.pc > 120 ? "Dein PC ist gerade nicht erreichbar – Bildstudio läuft nicht." : "Dein PC stellt deine Bilder gerade bereit …";
+      if (round < 10) setTimeout(() => tab === "mine" && loadGallery(round + 1), 3000);
+      return;
+    }
+    const data = JSON.parse(new TextDecoder().decode(await openForMe(unb64(r.index), "gal:index")));
+    gal.items = data.items || [];
+    if (tab === "mine") paintGallery();
+    if (round === 0) setTimeout(() => tab === "mine" && !gal.select && loadGallery(99), 6000);   // the PC may just have added new ones
+  } catch (e) {
+    if ($("#mnote")) $("#mnote").textContent = e.message && e.status ? e.message : "Deine Bilder konnten nicht geladen werden – schick /hilfe und öffne die App neu.";
+  }
+}
+const KIND_ICON = { video: "🎥", model: "🧊", image: "" };
+function paintGallery() {
+  const grid = $("#mgrid"); if (!grid || !gal.items) return;
+  const n = gal.items.length;
+  $("#mnote").textContent = n ? (gal.select ? "Tippe an, was weg soll." : `${plural(n, "Ergebnis", "Ergebnisse")} – antippen zum Ansehen.`) : "Noch nichts erstellt – leg los!";
+  $("#sel").textContent = gal.select ? "Fertig" : "Auswählen";
+  $("#sel").classList.toggle("hidden", !n);
+  grid.innerHTML = gal.items.map((it) => `<button class="card mcard${gal.chosen.has(it.i) ? " on" : ""}" data-i="${it.i}">
+      ${it.n ? `<img data-n="${esc(it.n)}" alt="">` : `<span class="emo">${KIND_ICON[it.k] || "🖼️"}</span>`}
+      ${it.n && KIND_ICON[it.k] ? `<span class="kind">${KIND_ICON[it.k]}</span>` : ""}
+      ${gal.select ? `<span class="sel">${ICON.check}</span>` : ""}</button>`).join("");
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((list) => list.forEach((en) => {
+    if (en.isIntersecting) { io.unobserve(en.target); loadThumb(en.target); }
+  }), { rootMargin: "300px" }) : null;
+  $$("img[data-n]", grid).forEach((img) => (io ? io.observe(img) : loadThumb(img)));
+  if (gal.select) {
+    const k = gal.chosen.size;
+    setGo(k ? `${plural(k, "Bild", "Bilder")} endgültig löschen` : "Bilder antippen", () => deleteChosen([...gal.chosen]), k > 0);
+  } else hideGo();
+}
+async function loadThumb(img) {
+  const name = img.dataset.n;
+  try {
+    if (!gal.urls.has(name)) {
+      const r = await fetch(BOX.url.replace(/\/+$/, "") + "/gal/" + encodeURIComponent(name), { headers: { "X-Ticket": TICKET } });
+      if (!r.ok) return;
+      const plain = await openForMe(new Uint8Array(await r.arrayBuffer()), "gal:" + name);
+      gal.urls.set(name, URL.createObjectURL(new Blob([plain], { type: "image/webp" })));
+    }
+    img.src = gal.urls.get(name);
+    if (img.complete) img.classList.add("in"); else img.addEventListener("load", () => img.classList.add("in"), { once: true });
+  } catch (e) { /* stays empty */ }
+}
+function confirmDelete(count, yes) {
+  const text = `${plural(count, "Bild", "Bilder")} endgültig löschen? Es wird auch auf dem PC gelöscht (nicht im Papierkorb) – das geht nicht rückgängig.`;
+  if (inTelegram && tg.showConfirm) { try { tg.showConfirm(text, (ok) => ok && yes()); return; } catch (e) { /* older client */ } }
+  if (window.confirm(text)) yes();
+}
+function deleteChosen(ids) {
+  confirmDelete(ids.length, async () => {
+    const trip = await dispatch({ t: "delete", ids }, { quiet: true });
+    if (!trip) return;
+    gal.items = gal.items.filter((it) => !ids.includes(it.i));
+    gal.chosen.clear(); gal.select = false; closeViewer();
+    toast(`${plural(ids.length, "Bild", "Bilder")} gelöscht – auch auf dem PC`);
+    if (tab === "mine") paintGallery();
+  });
+}
+function openViewer(it) {
+  if (!it) return;
+  const v = $("#viewer");
+  v.innerHTML = `${it.n && gal.urls.get(it.n) ? `<img src="${gal.urls.get(it.n)}" alt="">` : `<div class="emo" style="font-size:80px;text-align:center">${KIND_ICON[it.k] || "🖼️"}</div>`}
+    <p>${esc(it.t || "Ohne Titel")}<br><small>${esc((it.d || "").replace("T", " · "))}${it.c > 1 ? ` · ${it.c} Dateien` : ""}</small></p>
+    <div class="row2"><button class="del" id="vdel">Löschen</button><button id="vclose">Schließen</button></div>`;
+  v.classList.add("open");
+  $("#vclose").addEventListener("click", closeViewer);
+  $("#vdel").addEventListener("click", () => deleteChosen([it.i]));
+  setBack(closeViewer); hideGo();
+}
+function closeViewer() {
+  $("#viewer").classList.remove("open");
+  if (tab === "mine") { setBack(null); if (gal.select) paintGallery(); }
+}
+$("#viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") closeViewer(); });
+
+paintTrips(); watchTrips();
 loadFavs(() => openTab(IDEA || location.hash.includes("idee") ? "idea" : "effects"));
 </script>
 </body>

@@ -312,6 +312,9 @@ body.lock .tabs, body.dock-on .tabs.hide-for-go { transform: translateY(150%); o
 .stepper button:disabled { opacity: .3; }
 .stepper .num { flex: 1; text-align: center; }
 .stepper .num b { display: block; font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1; text-shadow: var(--split); font-variant-numeric: tabular-nums; }
+.stepper .num input.numin { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: center;
+  font: 800 30px/1 var(--font); letter-spacing: -.03em; text-shadow: var(--split); font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.stepper .num input.numin::-webkit-outer-spin-button, .stepper .num input.numin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .stepper .num small { display: block; font-size: 11.5px; color: var(--hint); margin-top: 3px; }
 .dl { margin: 0; }
 .dl > div { display: flex; gap: 14px; padding: 11px 15px; font-size: 14px; }
@@ -1160,12 +1163,15 @@ function ivState() {
     iv.s = { a: p.q.map((_, i) => (p.a && p.a[i]) || ""), x: p.x || "", f: p.fo || p.fs || made.f, m: model,
              ql: QUALITIES.some((q) => q.id === p.qo) ? p.qo : quality, max };
     // 🎲 how many different prompts × pictures of each (12 = 12 × 1 or 4 × 3 …)
-    iv.s.pp = clamp(p.pp || (p.va === "gleich" ? Math.min(p.n || 1, PER_MAX) : 1), 1, PER_MAX);
+    iv.s.pp = clamp(p.pp || (p.va === "gleich" ? Math.min(p.n || 1, perMax()) : 1), 1, perMax());
     iv.s.np = clamp(Math.round((p.n || 4) / iv.s.pp), 1, Math.max(1, Math.floor(max / iv.s.pp)));
   }
   return iv.s;
 }
 const PER_MAX = 4;
+const UNLIMITED = 100000;                                  // 👑 the owner: no limits
+const perMax = () => IDEA.ppm || PER_MAX;
+const PER_CHOICES = () => (perMax() > PER_MAX ? [1, 2, 3, 4, 6, 10, 20] : [1, 2, 3, 4]);
 const total = (s) => s.np * s.pp;
 function splitText(s) {
   if (s.pp === 1) return s.np === 1 ? "1 Bild" : "jedes mit eigener Bildidee";
@@ -1246,10 +1252,10 @@ function interview(dir) {
         : models.length > 1 ? `<div class="label">Bildmodell</div>${options("ivm", models, s.m)}` : ""}`}
       <div class="label">Qualität</div>${seg("ivq", qualityItems(), s.ql)}
       <div class="label">Verschiedene Prompts <span class="aside">jeder eine eigene Bildidee</span></div>
-      <div class="stepper"><button id="minus" aria-label="Weniger">−</button><div class="num"><b id="n">${s.np}</b><small id="nmax"></small></div><button id="plus" aria-label="Mehr">+</button></div>
-      <div class="scroller" id="quick">${QUICK.map((n) => `<button class="chip${n === s.np ? " on" : ""}" data-n="${n}">${n}</button>`).join("")}</div>
+      <div class="stepper"><button id="minus" aria-label="Weniger">−</button><div class="num"><input id="n" class="numin" type="number" inputmode="numeric" min="1" value="${s.np}" aria-label="Anzahl"><small id="nmax"></small></div><button id="plus" aria-label="Mehr">+</button></div>
+      <div class="scroller" id="quick">${(s.max >= UNLIMITED ? [1, 4, 8, 12, 20, 50, 100, 250, 500, 1000] : QUICK).map((n) => `<button class="chip${n === s.np ? " on" : ""}" data-n="${n}">${n}</button>`).join("")}</div>
       <div class="label">Bilder je Prompt <span class="aside">gleicher Prompt, neu gewürfelt</span></div>
-      ${seg("ivpp", Array.from({ length: PER_MAX }, (_, i) => ({ v: i + 1, n: `${i + 1}×` })), s.pp)}
+      ${seg("ivpp", [...new Set([...PER_CHOICES(), s.pp])].sort((a, b) => a - b).map((k) => ({ v: k, n: `${k}×` })), s.pp)}
       <p class="note" id="ivsum"></p></div>`, (el) => {
       wire(el);
       pick($("#ivf"), (v) => { s.f = v; });
@@ -1258,14 +1264,15 @@ function interview(dir) {
       const top = () => Math.max(1, Math.floor(s.max / s.pp));
       const paintN = () => {
         s.np = clamp(s.np, 1, top());
-        $("#n").textContent = s.np;
-        $("#nmax").textContent = `höchstens ${top()}`;
+        if (document.activeElement !== $("#n")) $("#n").value = s.np;
+        $("#nmax").textContent = s.max >= UNLIMITED ? "unbegrenzt" : `höchstens ${top()}`;
         $("#minus").disabled = s.np <= 1; $("#plus").disabled = s.np >= top();
         $$("#quick .chip").forEach((b) => { b.classList.toggle("on", +b.dataset.n === s.np); b.hidden = +b.dataset.n > top(); });
         $("#ivsum").innerHTML = `= <b>${plural(total(s), "Bild", "Bilder")}</b> · ${esc(splitText(s))}`;
       };
       const setN = (n) => { s.np = n; paintN(); haptic.pick(); };
-      pick($("#ivpp"), (v) => { s.pp = clamp(+v, 1, PER_MAX); paintN(); });
+      pick($("#ivpp"), (v) => { s.pp = clamp(+v, 1, perMax()); paintN(); });
+      $("#n").addEventListener("change", () => { s.np = Math.max(1, Math.floor(+$("#n").value || 1)); $("#n").blur(); paintN(); });
       $("#minus").addEventListener("click", () => setN(s.np - 1));
       $("#plus").addEventListener("click", () => setN(s.np + 1));
       $("#quick").addEventListener("click", (e) => { const b = e.target.closest("[data-n]"); if (b) setN(+b.dataset.n); });

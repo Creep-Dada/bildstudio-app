@@ -379,6 +379,20 @@ body.dock-on .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
   border-radius: 14px; background: linear-gradient(var(--solid2), var(--solid2)) padding-box, linear-gradient(120deg, var(--red), var(--cyan)) border-box;
   border: 1px solid transparent; color: var(--hint); }
 
+/* ---------- ideas: the model button, secondary buttons ---------- */
+.ai { flex: none; margin-bottom: 8px; padding: 8px 13px; border-radius: 999px; font-size: 13.5px; font-weight: 650;
+  background: linear-gradient(var(--bg), var(--bg)) padding-box, linear-gradient(90deg, var(--red), var(--cyan)) border-box; border: 1px solid transparent;
+  transition: transform .4s var(--spring); }
+.ai:active { transform: scale(.94); }
+.ghost-btn { display: block; width: 100%; margin-top: 12px; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg2);
+  font-weight: 650; transition: transform .4s var(--spring), box-shadow .3s; }
+.ghost-btn:active { transform: scale(.97); }
+.ghost-btn:disabled { opacity: .45; }
+.ghost-btn.danger { color: var(--red); border-color: var(--red-a); }
+.row2b { display: flex; gap: 10px; }
+.row2b .ghost-btn { flex: 1; }
+.label .aside { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
 /* ---------- „Meine Bilder“ ---------- */
 .mine-head { display: flex; align-items: flex-end; gap: 12px; }
 .mine-head h1 { flex: 1; }
@@ -986,35 +1000,105 @@ function thinking() {
   render(`<div class="sent"><div class="think">${$(".top .logo").outerHTML}</div><h2>Ich denke über deine Idee nach …</h2>
     <p class="note">Die Fragen erscheinen gleich hier – das dauert meist eine halbe Minute.</p></div>`);
 }
+let ideaShots = [];   // 📷 photos for the idea: the pictures become edits of photo 1
 function ideaHome() {
   setCtx("Ideen");
   render(`<div>
-    <h1>Was möchtest du <em>sehen</em>?</h1>
-    <p class="lead">Erzähl mir deine Idee. Ich stelle ein paar kurze Fragen – dann entstehen so viele Bilder, wie du willst.</p>
+    <div class="mine-head"><h1>Was möchtest du <em>sehen</em>?</h1>${PREFS.own && BOX ? '<button class="ai" id="ai">🧠 KI</button>' : ""}</div>
+    <p class="lead">Erzähl mir deine Idee. Ich stelle ein paar kurze Fragen – meine Tipps sind schon angetippt – dann entstehen so viele Bilder, wie du willst.</p>
     <div class="field"><textarea id="idea" maxlength="2000" placeholder="z. B. Ein Leuchtturm im Sturm bei Nacht …">${esc(draft)}</textarea><span class="count"><span id="len">0</span>/2000</span></div>
     <div class="scroller" id="ex">${EXAMPLES.map((e) => `<button class="chip" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}</div>
+    ${BOX ? `<div class="label">Foto dazu <span class="aside">optional – z. B. „Mein Hund als Ritter“</span></div>
+    <div class="picks" id="ishots"></div><input type="file" id="ishotfile" accept="image/*" multiple hidden>` : ""}
+    ${BOX ? '<button class="ghost-btn" id="auto">⚡ Ohne Fragen – die KI entscheidet alles</button>' : ""}
     <div class="how">
-      <div><i>1</i><p><b>Idee senden</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl.</span></p></div>
-      <div><i>2</i><p><b>Fragen antippen</b><span>Sobald ich nachgedacht habe, tippst du unten wieder auf <strong>PikTscha</strong>.</span></p></div>
+      <div><i>1</i><p><b>Idee senden</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl. Mit Foto bleibt erkennbar, was darauf ist.</span></p></div>
+      <div><i>2</i><p><b>Fragen antippen</b><span>Meine Empfehlungen sind schon gewählt – ändern oder einfach weiter.</span></p></div>
       <div><i>3</i><p><b>Bilder bekommen</b><span>Bis zu ${esc(PREFS.max)} Stück, direkt in den Chat.</span></p></div>
     </div></div>`, () => {
-    const box = $("#idea"), len = $("#len");
+    const box = $("#idea"), len = $("#len"), shots = $("#ishots"), file = $("#ishotfile");
+    const go = (auto) => {
+      const text = box.value.trim();
+      if (text.length < 3) { toast("Erst die Idee in ein paar Worten"); return; }
+      if (!BOX) { send({ t: "idea", idea: text }, "Deine Idee ist unterwegs"); return; }
+      dispatch({ t: "idea", idea: text, auto }, { files: ideaShots.map((s) => s.file), title: (auto ? "⚡ " : "💡 ") + text });
+      ideaShots.forEach((s) => URL.revokeObjectURL(s.url)); ideaShots = [];
+      draft = "";
+      if (auto) { toast("Geht los – den Stand siehst du oben"); ideaHome(); } else thinking();
+    };
+    const paint = () => {
+      if (!shots) return;
+      shots.innerHTML = ideaShots.map((s, i) => `<div class="pick"><img src="${s.url}" alt=""><i>${i + 1}</i>
+          <button class="unpick" data-i="${i}" aria-label="Foto ${i + 1} entfernen">${ICON.x}</button></div>`).join("")
+        + (ideaShots.length < 3 ? `<button class="pick add" id="addishot">${ICON.camera}<span>${ideaShots.length ? "Noch eins" : "Foto wählen"}</span></button>` : "");
+    };
     const update = () => {
       draft = box.value; len.textContent = box.value.length;
-      setGo("Idee senden", () => {
-        const text = box.value.trim();
-        if (!BOX) { send({ t: "idea", idea: text }, "Deine Idee ist unterwegs"); return; }
-        dispatch({ t: "idea", idea: text }, { title: "💡 " + text });
-        draft = ""; thinking();
-      }, box.value.trim().length >= 3);
+      setGo(ideaShots.length ? "Idee mit Foto senden" : "Idee senden", () => go(false), box.value.trim().length >= 3);
     };
     box.addEventListener("input", update);
     $("#ex").addEventListener("click", (e) => {
       const b = e.target.closest("[data-ex]"); if (!b) return;
       box.value = b.dataset.ex; haptic.pick(); update();
     });
-    update();
+    if (shots) {
+      shots.addEventListener("click", (e) => {
+        const un = e.target.closest(".unpick");
+        if (un) { const [gone] = ideaShots.splice(+un.dataset.i, 1); URL.revokeObjectURL(gone.url); haptic.pick(); paint(); update(); return; }
+        if (e.target.closest("#addishot")) file.click();
+      });
+      file.addEventListener("change", () => {
+        [...file.files].filter((x) => x.type.startsWith("image/") || !x.type).slice(0, 3 - ideaShots.length)
+          .forEach((f) => ideaShots.push({ file: f, url: URL.createObjectURL(f) }));
+        file.value = ""; haptic.tap(); paint(); update();
+      });
+    }
+    if ($("#auto")) $("#auto").addEventListener("click", () => { haptic.tap("medium"); go(true); });
+    if ($("#ai")) $("#ai").addEventListener("click", () => { haptic.tap(); openAi(); });
+    paint(); update();
   });
+}
+
+/* ---------- 🧠 the language model behind the ideas (owner): choose, load, unload ---------- */
+const gb = (n) => n ? `${(n / 1e9).toFixed(1)} GB` : "";
+async function openAi() {
+  sheetScroll.innerHTML = `<div class="sheet-head"><h2>KI-Modell</h2></div>
+    <p class="lead">Das Sprachmodell in LM Studio, das die Fragen stellt und die Bildbeschreibungen schreibt.</p>
+    <div id="aibody"><p class="empty">Frage den PC …</p></div>`;
+  sheet.classList.add("open"); scrim.classList.add("open"); document.body.classList.add("lock");
+  setBack(() => closeSheet()); hideGo();
+  let st;
+  const paintAi = () => {
+    const loaded = st.loaded || [];
+    const sel = st.pick || st.current;
+    $("#aibody").innerHTML = !st.reachable ? '<p class="empty">LM Studio antwortet nicht – läuft es auf dem PC?</p>' : `
+      <div class="info">${ICON.camera}<span>${loaded.length ? `Geladen: <b>${esc(loaded.join(", "))}</b>` : "Gerade ist kein Sprachmodell geladen – die Grafikkarte ist frei für Bilder."}
+        Vor jedem Bild wird es wieder entladen; nach 15 min Leerlauf auch.</span></div>
+      <div class="label">Modell für die Ideen</div>
+      ${options("aim", st.models.map((m) => ({ v: m.id, b: m.name, tip: m.id === st.current,
+        s: [m.params, gb(m.size), m.vision ? "sieht Fotos" : "ohne Bildverständnis", loaded.includes(m.id) ? "geladen" : ""].filter(Boolean).join(" · ") })), sel)}
+      <div class="row2b"><button class="ghost-btn" id="aiload">${loaded.includes(sel) ? "✓ Geladen" : "Laden"}</button>
+        <button class="ghost-btn danger" id="aiunload" ${loaded.length ? "" : "disabled"}>Entladen</button></div>
+      <p class="note">„Tipp“ = das Modell, das gerade für die Ideen eingestellt ist. Laden belegt etwa so viel Grafikspeicher wie angegeben.</p>`;
+    if (!st.reachable) return;
+    pick($("#aim"), async (v) => {
+      st.pick = v;
+      if (v !== st.current) { try { st = await ask({ t: "llm", act: "select", id: v }); toast("Für die Ideen eingestellt"); } catch (e) { toast(e.message); } }
+      paintAi();
+    });
+    $("#aiload").addEventListener("click", async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Lädt … (bis zu 1 min)";
+      try { st = await ask({ t: "llm", act: "load", id: st.pick || st.current }); haptic.ok(); toast("Geladen"); } catch (err) { toast(err.message); }
+      paintAi();
+    });
+    $("#aiunload").addEventListener("click", async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Entlädt …";
+      try { st = await ask({ t: "llm", act: "unload" }); haptic.ok(); toast("Entladen – Grafikkarte frei"); } catch (err) { toast(err.message); }
+      paintAi();
+    });
+  };
+  try { st = await ask({ t: "llm" }); paintAi(); }
+  catch (e) { $("#aibody").innerHTML = `<p class="empty">${esc(e.message || "Der PC antwortet nicht.")}</p>`; }
 }
 
 const iv = { step: 0, s: null };
@@ -1032,10 +1116,16 @@ function interview(dir) {
   setCtx(`Schritt ${step + 1} von ${steps}`);
   const goStep = (to) => { const d = to > iv.step ? 1 : -1; iv.step = to; haptic.pick(); interview(d); };
   setBack(step > 0 ? () => goStep(step - 1) : null);
-  const head = `<div class="iv-head"><span class="kicker">💡 ${esc(p.title)}</span><button class="link danger" id="drop">Verwerfen</button></div>
+  const head = `<div class="iv-head"><span class="kicker">${p.r ? "📷" : "💡"} ${esc(p.title)}</span>${BOX ? '<button class="link" id="quick">⚡ Einfach machen</button>' : ""}<button class="link danger" id="drop">Verwerfen</button></div>
     <div class="progress">${Array.from({ length: steps }, (_, i) => `<i class="${i < step ? "done" : ""}"></i>`).join("")}</div>`;
   const wire = (el) => {
     $("#drop", el).addEventListener("click", dropIdea);
+    const quick = $("#quick", el);
+    if (quick) quick.addEventListener("click", () => {   // ⚡ the answers as they are (my tips), straight to the pictures
+      haptic.tap("medium");
+      dispatch({ t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n }, { title: `💡 ${p.title} · ${plural(s.n, "Bild", "Bilder")}` });
+      ideaDropped = true; IDEA = null; toast("Geht los – den Stand siehst du oben"); ideaHome();
+    });
     const bar = $$(".progress i", el)[step];
     requestAnimationFrame(() => requestAnimationFrame(() => bar && bar.classList.add("done")));
   };
@@ -1053,7 +1143,7 @@ function interview(dir) {
       ${step === 0 && p.summary ? `<p class="summary">${esc(p.summary)}</p>` : ""}
       <h2>${esc(q.t)}</h2><p class="note">Tipp alles an, was passt – gern auch mehreres.</p>
       <div class="list${two ? " two" : ""}" id="opts" style="margin-top:16px">${q.o.map((o, k) => `<button class="opt${chosen.has(o) ? " on" : ""}" data-k="${k}">
-        <span class="txt"><b>${esc(o)}</b></span><span class="check">${ICON.check}</span></button>`).join("")}</div>
+        <span class="txt"><b>${esc(o)}</b></span>${(q.p || []).includes(o) ? '<span class="badge">Tipp</span>' : ""}<span class="check">${ICON.check}</span></button>`).join("")}</div>
       <div class="field own"><input id="own" placeholder="… und/oder eigene Antwort" value="${esc(own)}" enterkeyhint="next"></div></div>`, (el) => {
       wire(el);
       $("#opts").addEventListener("click", (e) => {
@@ -1088,9 +1178,10 @@ function interview(dir) {
     const models = MODELS.map((m) => ({ v: m.id, b: m.n, s: m.id === p.mo && p.mr ? p.mr : m.h, tip: m.id === p.mo }));
     render(`<div>${head}
       <p class="step-no">Feinschliff</p>
-      <h2>Format, Modell und Anzahl</h2>
-      <div class="label">Format</div>${formats("ivf", s.f, p.fs)}
-      ${models.length > 1 ? `<div class="label">Bildmodell</div>${options("ivm", models, s.m)}` : ""}
+      <h2>${p.r ? "Qualität und Anzahl" : "Format, Modell und Anzahl"}</h2>
+      ${p.r ? '<p class="note">Mit Foto: Format und Bildmodell richten sich nach deinem Foto – es wird bearbeitet, damit erkennbar bleibt, was darauf ist.</p>'
+        : `<div class="label">Format</div>${formats("ivf", s.f, p.fs)}
+      ${models.length > 1 ? `<div class="label">Bildmodell</div>${options("ivm", models, s.m)}` : ""}`}
       <div class="label">Qualität</div>${seg("ivq", qualityItems(), s.ql)}
       <div class="label">Wie unterschiedlich?</div>${options("ivv", VARIETY, s.va)}
       <div class="label">Wie viele Bilder?</div>
@@ -1126,8 +1217,8 @@ function interview(dir) {
     <h2>${esc(p.title)}</h2>
     <div class="rows" style="margin-top:14px"><dl class="dl">
       <div><dt>Bilder</dt><dd>${s.n} · ${esc(VARIETY.find((v) => v.v === s.va).b)}</dd></div>
-      <div><dt>Format</dt><dd>${esc(s.f)} ${esc(fmt)}</dd></div>
-      ${model ? `<div><dt>Modell</dt><dd>${esc(model)}</dd></div>` : ""}
+      ${p.r ? `<div><dt>Foto</dt><dd>${plural(p.r, "Foto", "Fotos")} – wird bearbeitet</dd></div>` : `<div><dt>Format</dt><dd>${esc(s.f)} ${esc(fmt)}</dd></div>
+      ${model ? `<div><dt>Modell</dt><dd>${esc(model)}</dd></div>` : ""}`}
       <div><dt>Qualität</dt><dd>${esc((QUALITIES.find((q) => q.id === s.ql) || { n: s.ql }).n)}</dd></div>
       ${answered.map(([q, a]) => `<div><dt>${esc(q)}</dt><dd>${esc(a)}</dd></div>`).join("")}
       ${s.x.trim() ? `<div><dt>Außerdem</dt><dd>${esc(s.x)}</dd></div>` : ""}

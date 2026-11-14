@@ -384,6 +384,7 @@ body.dock-on .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
   background: linear-gradient(var(--bg), var(--bg)) padding-box, linear-gradient(90deg, var(--red), var(--cyan)) border-box; border: 1px solid transparent;
   transition: transform .4s var(--spring); }
 .ai:active { transform: scale(.94); }
+.opt small.tipl { color: var(--cyan); font-weight: 650; font-size: 11.5px; }
 .ghost-btn { display: block; width: 100%; margin-top: 12px; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg2);
   font-weight: 650; transition: transform .4s var(--spring), box-shadow .3s; }
 .ghost-btn:active { transform: scale(.97); }
@@ -1143,7 +1144,7 @@ function interview(dir) {
       ${step === 0 && p.summary ? `<p class="summary">${esc(p.summary)}</p>` : ""}
       <h2>${esc(q.t)}</h2><p class="note">Tipp alles an, was passt – gern auch mehreres.</p>
       <div class="list${two ? " two" : ""}" id="opts" style="margin-top:16px">${q.o.map((o, k) => `<button class="opt${chosen.has(o) ? " on" : ""}" data-k="${k}">
-        <span class="txt"><b>${esc(o)}</b></span>${(q.p || []).includes(o) ? '<span class="badge">Tipp</span>' : ""}<span class="check">${ICON.check}</span></button>`).join("")}</div>
+        <span class="txt"><b>${esc(o)}</b>${(q.p || []).includes(o) ? '<small class="tipl">★ Mein Tipp</small>' : ""}</span><span class="check">${ICON.check}</span></button>`).join("")}</div>
       <div class="field own"><input id="own" placeholder="… und/oder eigene Antwort" value="${esc(own)}" enterkeyhint="next"></div></div>`, (el) => {
       wire(el);
       $("#opts").addEventListener("click", (e) => {

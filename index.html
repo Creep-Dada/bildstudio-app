@@ -78,6 +78,8 @@ body.lock .app { transform: scale(.94); opacity: .4; }
 .vtag + .live { margin-left: 0; }
 .vtag.old { color: #ffb020; border-color: rgba(255, 176, 32, .6); background: rgba(255, 176, 32, .1); font-weight: 700; }
 .merow { margin: 14px 0 4px; }
+#irmbox { margin-top: 10px; }
+#irmbox .note { margin-top: 6px; }
 .vinfo { padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
 .vinfo b { font-variant-numeric: tabular-nums; }
 .vinfo .old { color: #ffb020; }
@@ -1013,7 +1015,9 @@ function thinking() {
     <p class="note">Die Fragen erscheinen gleich hier – das dauert meist eine halbe Minute.</p></div>`);
 }
 let ideaMe = false, ideaMeTouched = false;   // 👤 „Ich bin im Bild“ (switched on by „ich/mich/mein“ until chosen by hand)
-let ideaShots = [];   // 📷 photos for the idea: the pictures become edits of photo 1
+let ideaShots = [];   // photos for the idea (up to 4) …
+let ideaRefMode = "inspire";   // … 🎨 their style, look and theme for new pictures, or 📷 photo 1 is edited
+const ideaMode = () => (PREFS.me && ideaMe ? "inspire" : ideaRefMode);   // 👤 with you: photos only show the look
 function ideaHome() {
   setCtx("Ideen");
   render(`<div>
@@ -1024,39 +1028,55 @@ function ideaHome() {
     ${PREFS.me && BOX ? `<div class="rows merow"><div class="row"><div class="row-head"><div class="txt"><b>👤 Ich bin im Bild</b>
       <small>Die KI baut dich in jede Szene ein – dein Gesicht kommt von deinem LoRA</small></div>
       <input type="checkbox" class="tog" id="ime" aria-label="Ich bin im Bild" ${ideaMe ? "checked" : ""}></div></div></div>` : ""}
-    ${BOX ? `<div id="ishotsec"${ideaMe ? " hidden" : ""}><div class="label">Foto dazu <span class="aside">optional – z. B. „Mein Hund als Ritter“</span></div>
-    <div class="picks" id="ishots"></div><input type="file" id="ishotfile" accept="image/*" multiple hidden></div>` : ""}
+    ${BOX ? `<div id="ishotsec"><div class="label">Bilder dazu <span class="aside">optional – als Vorlage oder zum Bearbeiten</span></div>
+    <div class="picks" id="ishots"></div><input type="file" id="ishotfile" accept="image/*" multiple hidden>
+    <div id="irmbox" hidden><div id="irmseg"></div><p class="note" id="irmnote"></p></div></div>` : ""}
     ${BOX ? '<button class="ghost-btn" id="auto">⚡ Ohne Fragen – die KI entscheidet alles</button>' : ""}
     <div class="how">
-      <div><i>1</i><p><b>Idee senden</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl. Mit Foto bleibt erkennbar, was darauf ist.</span></p></div>
+      <div><i>1</i><p><b>Idee senden</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl. Oder nur Bilder als Vorlage: gleicher Look, neue Motive.</span></p></div>
       <div><i>2</i><p><b>Fragen antippen</b><span>Meine Empfehlungen sind schon gewählt – ändern oder einfach weiter.</span></p></div>
       <div><i>3</i><p><b>Bilder bekommen</b><span>Bis zu ${esc(PREFS.max)} Stück, direkt in den Chat.</span></p></div>
     </div></div>`, () => {
     const box = $("#idea"), len = $("#len"), shots = $("#ishots"), file = $("#ishotfile");
     const go = (auto) => {
       const text = box.value.trim();
-      if (text.length < 3) { toast("Erst die Idee in ein paar Worten"); return; }
+      const inspire = BOX && ideaShots.length && ideaMode() === "inspire";
+      if (text.length < 3 && !inspire) { toast("Erst die Idee in ein paar Worten"); return; }
       if (!BOX) { send({ t: "idea", idea: text }, "Deine Idee ist unterwegs"); return; }
       const me = !!(PREFS.me && ideaMe);
-      dispatch({ t: "idea", idea: text, auto, me }, { files: me ? [] : ideaShots.map((s) => s.file),
-                                                      title: (auto ? "⚡ " : me ? "👤 " : "💡 ") + text });
+      dispatch({ t: "idea", idea: text, auto, me, rm: ideaMode() }, { files: ideaShots.map((s) => s.file),
+        title: (auto ? "⚡ " : me ? "👤 " : inspire ? "🎨 " : "💡 ") + (text || "Wie meine Vorlage") });
       ideaShots.forEach((s) => URL.revokeObjectURL(s.url)); ideaShots = [];
-      draft = ""; ideaMe = false; ideaMeTouched = false;
+      draft = ""; ideaMe = false; ideaMeTouched = false; ideaRefMode = "inspire";
       if (auto) { toast("Geht los – den Stand siehst du oben"); ideaHome(); } else thinking();
     };
     const paint = () => {
       if (!shots) return;
       shots.innerHTML = ideaShots.map((s, i) => `<div class="pick"><img src="${s.url}" alt=""><i>${i + 1}</i>
           <button class="unpick" data-i="${i}" aria-label="Foto ${i + 1} entfernen">${ICON.x}</button></div>`).join("")
-        + (ideaShots.length < 3 ? `<button class="pick add" id="addishot">${ICON.camera}<span>${ideaShots.length ? "Noch eins" : "Foto wählen"}</span></button>` : "");
+        + (ideaShots.length < 4 ? `<button class="pick add" id="addishot">${ICON.camera}<span>${ideaShots.length ? "Noch eins" : "Bild wählen"}</span></button>` : "");
+      paintMode();
+    };
+    const paintMode = () => {   // 🎨 / 📷 – only once there is a photo
+      const boxEl = $("#irmbox");
+      if (!boxEl) return;
+      boxEl.hidden = !ideaShots.length;
+      const me = !!(PREFS.me && ideaMe);
+      $("#irmseg").innerHTML = seg("irm", [{ v: "inspire", n: "🎨 Als Inspiration" }, ...(me ? [] : [{ v: "edit", n: "📷 Bearbeiten" }])], ideaMode());
+      $("#irmnote").textContent = ideaMode() === "inspire"
+        ? "Die KI schaut sich Stil, Look, Farben und Thema an und schreibt neue Prompts in diesem Design – keine Kopie. Text ist dann optional."
+        : "Aus dem Foto wird das neue Bild – Person, Tier oder Gegenstand bleiben erkennbar.";
+      pick($("#irm"), (v) => { ideaRefMode = v; paintMode(); update(); });
     };
     const meBox = $("#ime");
-    const showMe = () => { if (meBox) meBox.checked = ideaMe; if ($("#ishotsec")) $("#ishotsec").hidden = !!(PREFS.me && ideaMe); };
+    const showMe = () => { if (meBox) meBox.checked = ideaMe; paintMode(); };
     const update = () => {
       draft = box.value; len.textContent = box.value.length;
       if (meBox && !ideaMeTouched) { ideaMe = /(^|[^a-zäöüß])(ich|mich|mir|mein\w*)(?![a-zäöüß])/i.test(box.value); showMe(); }
       const me = !!(PREFS.me && ideaMe);
-      setGo(me ? "Idee mit mir senden" : ideaShots.length ? "Idee mit Foto senden" : "Idee senden", () => go(false), box.value.trim().length >= 3);
+      const inspire = ideaShots.length && ideaMode() === "inspire";
+      setGo(me ? "Idee mit mir senden" : inspire ? "Vorlage senden" : ideaShots.length ? "Idee mit Foto senden" : "Idee senden",
+            () => go(false), box.value.trim().length >= 3 || !!inspire);
     };
     if (meBox) meBox.addEventListener("change", () => { ideaMe = meBox.checked; ideaMeTouched = true; haptic.tap(); showMe(); update(); });
     box.addEventListener("input", update);
@@ -1071,7 +1091,7 @@ function ideaHome() {
         if (e.target.closest("#addishot")) file.click();
       });
       file.addEventListener("change", () => {
-        [...file.files].filter((x) => x.type.startsWith("image/") || !x.type).slice(0, 3 - ideaShots.length)
+        [...file.files].filter((x) => x.type.startsWith("image/") || !x.type).slice(0, 4 - ideaShots.length)
           .forEach((f) => ideaShots.push({ file: f, url: URL.createObjectURL(f) }));
         file.value = ""; haptic.tap(); paint(); update();
       });
@@ -1149,7 +1169,7 @@ function interview(dir) {
   setCtx(`Schritt ${step + 1} von ${steps}`);
   const goStep = (to) => { const d = to > iv.step ? 1 : -1; iv.step = to; haptic.pick(); interview(d); };
   setBack(step > 0 ? () => goStep(step - 1) : null);
-  const head = `<div class="iv-head"><span class="kicker">${p.me ? "👤" : p.r ? "📷" : "💡"} ${esc(p.title)}</span>${BOX ? '<button class="link" id="quick">⚡ Einfach machen</button>' : ""}<button class="link danger" id="drop">Verwerfen</button></div>
+  const head = `<div class="iv-head"><span class="kicker">${p.me ? "👤" : p.r ? "📷" : p.ri ? "🎨" : "💡"} ${esc(p.title)}</span>${BOX ? '<button class="link" id="quick">⚡ Einfach machen</button>' : ""}<button class="link danger" id="drop">Verwerfen</button></div>
     <div class="progress">${Array.from({ length: steps }, (_, i) => `<i class="${i < step ? "done" : ""}"></i>`).join("")}</div>`;
   const wire = (el) => {
     $("#drop", el).addEventListener("click", dropIdea);

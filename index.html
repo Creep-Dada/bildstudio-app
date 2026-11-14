@@ -77,6 +77,7 @@ body.lock .app { transform: scale(.94); opacity: .4; }
 .vtag:empty { display: none; }
 .vtag + .live { margin-left: 0; }
 .vtag.old { color: #ffb020; border-color: rgba(255, 176, 32, .6); background: rgba(255, 176, 32, .1); font-weight: 700; }
+.merow { margin: 14px 0 4px; }
 .vinfo { padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
 .vinfo b { font-variant-numeric: tabular-nums; }
 .vinfo .old { color: #ffb020; }
@@ -1011,6 +1012,7 @@ function thinking() {
   render(`<div class="sent"><div class="think">${$(".top .logo").outerHTML}</div><h2>Ich denke über deine Idee nach …</h2>
     <p class="note">Die Fragen erscheinen gleich hier – das dauert meist eine halbe Minute.</p></div>`);
 }
+let ideaMe = false, ideaMeTouched = false;   // 👤 „Ich bin im Bild“ (switched on by „ich/mich/mein“ until chosen by hand)
 let ideaShots = [];   // 📷 photos for the idea: the pictures become edits of photo 1
 function ideaHome() {
   setCtx("Ideen");
@@ -1019,8 +1021,11 @@ function ideaHome() {
     <p class="lead">Erzähl mir deine Idee. Ich stelle ein paar kurze Fragen – meine Tipps sind schon angetippt – dann entstehen so viele Bilder, wie du willst.</p>
     <div class="field"><textarea id="idea" maxlength="2000" placeholder="z. B. Ein Leuchtturm im Sturm bei Nacht …">${esc(draft)}</textarea><span class="count"><span id="len">0</span>/2000</span></div>
     <div class="scroller" id="ex">${EXAMPLES.map((e) => `<button class="chip" data-ex="${esc(e)}">${esc(e)}</button>`).join("")}</div>
-    ${BOX ? `<div class="label">Foto dazu <span class="aside">optional – z. B. „Mein Hund als Ritter“</span></div>
-    <div class="picks" id="ishots"></div><input type="file" id="ishotfile" accept="image/*" multiple hidden>` : ""}
+    ${PREFS.me && BOX ? `<div class="rows merow"><div class="row"><div class="row-head"><div class="txt"><b>👤 Ich bin im Bild</b>
+      <small>Die KI baut dich in jede Szene ein – dein Gesicht kommt von deinem LoRA</small></div>
+      <input type="checkbox" class="tog" id="ime" aria-label="Ich bin im Bild" ${ideaMe ? "checked" : ""}></div></div></div>` : ""}
+    ${BOX ? `<div id="ishotsec"${ideaMe ? " hidden" : ""}><div class="label">Foto dazu <span class="aside">optional – z. B. „Mein Hund als Ritter“</span></div>
+    <div class="picks" id="ishots"></div><input type="file" id="ishotfile" accept="image/*" multiple hidden></div>` : ""}
     ${BOX ? '<button class="ghost-btn" id="auto">⚡ Ohne Fragen – die KI entscheidet alles</button>' : ""}
     <div class="how">
       <div><i>1</i><p><b>Idee senden</b><span>Ein Satz reicht – Motiv, Anlass, Gefühl. Mit Foto bleibt erkennbar, was darauf ist.</span></p></div>
@@ -1032,9 +1037,11 @@ function ideaHome() {
       const text = box.value.trim();
       if (text.length < 3) { toast("Erst die Idee in ein paar Worten"); return; }
       if (!BOX) { send({ t: "idea", idea: text }, "Deine Idee ist unterwegs"); return; }
-      dispatch({ t: "idea", idea: text, auto }, { files: ideaShots.map((s) => s.file), title: (auto ? "⚡ " : "💡 ") + text });
+      const me = !!(PREFS.me && ideaMe);
+      dispatch({ t: "idea", idea: text, auto, me }, { files: me ? [] : ideaShots.map((s) => s.file),
+                                                      title: (auto ? "⚡ " : me ? "👤 " : "💡 ") + text });
       ideaShots.forEach((s) => URL.revokeObjectURL(s.url)); ideaShots = [];
-      draft = "";
+      draft = ""; ideaMe = false; ideaMeTouched = false;
       if (auto) { toast("Geht los – den Stand siehst du oben"); ideaHome(); } else thinking();
     };
     const paint = () => {
@@ -1043,10 +1050,15 @@ function ideaHome() {
           <button class="unpick" data-i="${i}" aria-label="Foto ${i + 1} entfernen">${ICON.x}</button></div>`).join("")
         + (ideaShots.length < 3 ? `<button class="pick add" id="addishot">${ICON.camera}<span>${ideaShots.length ? "Noch eins" : "Foto wählen"}</span></button>` : "");
     };
+    const meBox = $("#ime");
+    const showMe = () => { if (meBox) meBox.checked = ideaMe; if ($("#ishotsec")) $("#ishotsec").hidden = !!(PREFS.me && ideaMe); };
     const update = () => {
       draft = box.value; len.textContent = box.value.length;
-      setGo(ideaShots.length ? "Idee mit Foto senden" : "Idee senden", () => go(false), box.value.trim().length >= 3);
+      if (meBox && !ideaMeTouched) { ideaMe = /(^|[^a-zäöüß])(ich|mich|mir|mein\w*)(?![a-zäöüß])/i.test(box.value); showMe(); }
+      const me = !!(PREFS.me && ideaMe);
+      setGo(me ? "Idee mit mir senden" : ideaShots.length ? "Idee mit Foto senden" : "Idee senden", () => go(false), box.value.trim().length >= 3);
     };
+    if (meBox) meBox.addEventListener("change", () => { ideaMe = meBox.checked; ideaMeTouched = true; haptic.tap(); showMe(); update(); });
     box.addEventListener("input", update);
     $("#ex").addEventListener("click", (e) => {
       const b = e.target.closest("[data-ex]"); if (!b) return;
@@ -1118,23 +1130,33 @@ function ivState() {
     const p = IDEA, max = p.max || PREFS.max || 20;
     const model = MODELS.some((m) => m.id === p.mo) ? p.mo : (MODELS[0] && MODELS[0].id) || "";
     iv.s = { a: p.q.map((_, i) => (p.a && p.a[i]) || ""), x: p.x || "", f: p.fo || p.fs || made.f, m: model,
-             ql: QUALITIES.some((q) => q.id === p.qo) ? p.qo : quality, va: p.va === "gleich" ? "gleich" : "vielfalt", n: clamp(p.n || 4, 1, max), max };
+             ql: QUALITIES.some((q) => q.id === p.qo) ? p.qo : quality, max };
+    // 🎲 how many different prompts × pictures of each (12 = 12 × 1 or 4 × 3 …)
+    iv.s.pp = clamp(p.pp || (p.va === "gleich" ? Math.min(p.n || 1, PER_MAX) : 1), 1, PER_MAX);
+    iv.s.np = clamp(Math.round((p.n || 4) / iv.s.pp), 1, Math.max(1, Math.floor(max / iv.s.pp)));
   }
   return iv.s;
 }
+const PER_MAX = 4;
+const total = (s) => s.np * s.pp;
+function splitText(s) {
+  if (s.pp === 1) return s.np === 1 ? "1 Bild" : "jedes mit eigener Bildidee";
+  return s.np === 1 ? `eine Szene, ${s.pp}× gewürfelt` : `${s.np} Bildideen, jede ${s.pp}× gewürfelt`;
+}
+const answersOrder = (p, s) => ({ t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, n: total(s), pp: s.pp });
 function interview(dir) {
   const p = IDEA, s = ivState(), qs = p.q, steps = qs.length + 3, step = iv.step;
   setCtx(`Schritt ${step + 1} von ${steps}`);
   const goStep = (to) => { const d = to > iv.step ? 1 : -1; iv.step = to; haptic.pick(); interview(d); };
   setBack(step > 0 ? () => goStep(step - 1) : null);
-  const head = `<div class="iv-head"><span class="kicker">${p.r ? "📷" : "💡"} ${esc(p.title)}</span>${BOX ? '<button class="link" id="quick">⚡ Einfach machen</button>' : ""}<button class="link danger" id="drop">Verwerfen</button></div>
+  const head = `<div class="iv-head"><span class="kicker">${p.me ? "👤" : p.r ? "📷" : "💡"} ${esc(p.title)}</span>${BOX ? '<button class="link" id="quick">⚡ Einfach machen</button>' : ""}<button class="link danger" id="drop">Verwerfen</button></div>
     <div class="progress">${Array.from({ length: steps }, (_, i) => `<i class="${i < step ? "done" : ""}"></i>`).join("")}</div>`;
   const wire = (el) => {
     $("#drop", el).addEventListener("click", dropIdea);
     const quick = $("#quick", el);
     if (quick) quick.addEventListener("click", () => {   // ⚡ the answers as they are (my tips), straight to the pictures
       haptic.tap("medium");
-      dispatch({ t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n }, { title: `💡 ${p.title} · ${plural(s.n, "Bild", "Bilder")}` });
+      dispatch(answersOrder(p, s), { title: `${p.me ? "👤" : "💡"} ${p.title} · ${plural(total(s), "Bild", "Bilder")}` });
       ideaDropped = true; IDEA = null; toast("Geht los – den Stand siehst du oben"); ideaHome();
     });
     const bar = $$(".progress i", el)[step];
@@ -1189,31 +1211,37 @@ function interview(dir) {
     const models = MODELS.map((m) => ({ v: m.id, b: m.n, s: m.id === p.mo && p.mr ? p.mr : m.h, tip: m.id === p.mo }));
     render(`<div>${head}
       <p class="step-no">Feinschliff</p>
-      <h2>${p.r ? "Qualität und Anzahl" : "Format, Modell und Anzahl"}</h2>
+      <h2>${p.r ? "Qualität und Anzahl" : p.me ? "Format und Anzahl" : "Format, Modell und Anzahl"}</h2>
       ${p.r ? '<p class="note">Mit Foto: Format und Bildmodell richten sich nach deinem Foto – es wird bearbeitet, damit erkennbar bleibt, was darauf ist.</p>'
         : `<div class="label">Format</div>${formats("ivf", s.f, p.fs)}
-      ${models.length > 1 ? `<div class="label">Bildmodell</div>${options("ivm", models, s.m)}` : ""}`}
+      ${p.me ? '<p class="note">👤 Du bist in jedem Bild – gerechnet mit FLUX und deinem LoRA.</p>'
+        : models.length > 1 ? `<div class="label">Bildmodell</div>${options("ivm", models, s.m)}` : ""}`}
       <div class="label">Qualität</div>${seg("ivq", qualityItems(), s.ql)}
-      <div class="label">Wie unterschiedlich?</div>${options("ivv", VARIETY, s.va)}
-      <div class="label">Wie viele Bilder?</div>
-      <div class="stepper"><button id="minus" aria-label="Weniger">−</button><div class="num"><b id="n">${s.n}</b><small>höchstens ${s.max}</small></div><button id="plus" aria-label="Mehr">+</button></div>
-      <div class="scroller" id="quick">${QUICK.filter((n) => n <= s.max).map((n) => `<button class="chip${n === s.n ? " on" : ""}" data-n="${n}">${n}</button>`).join("")}</div></div>`, (el) => {
+      <div class="label">Verschiedene Prompts <span class="aside">jeder eine eigene Bildidee</span></div>
+      <div class="stepper"><button id="minus" aria-label="Weniger">−</button><div class="num"><b id="n">${s.np}</b><small id="nmax"></small></div><button id="plus" aria-label="Mehr">+</button></div>
+      <div class="scroller" id="quick">${QUICK.map((n) => `<button class="chip${n === s.np ? " on" : ""}" data-n="${n}">${n}</button>`).join("")}</div>
+      <div class="label">Bilder je Prompt <span class="aside">gleicher Prompt, neu gewürfelt</span></div>
+      ${seg("ivpp", Array.from({ length: PER_MAX }, (_, i) => ({ v: i + 1, n: `${i + 1}×` })), s.pp)}
+      <p class="note" id="ivsum"></p></div>`, (el) => {
       wire(el);
       pick($("#ivf"), (v) => { s.f = v; });
       pick($("#ivm"), (v) => { s.m = v; });
       pick($("#ivq"), (v) => { s.ql = v; });
-      pick($("#ivv"), (v) => { s.va = v; });
-      const setN = (n) => {
-        s.n = clamp(n, 1, s.max);
-        $("#n").textContent = s.n;
-        $("#minus").disabled = s.n <= 1; $("#plus").disabled = s.n >= s.max;
-        $$("#quick .chip").forEach((b) => b.classList.toggle("on", +b.dataset.n === s.n));
-        haptic.pick();
+      const top = () => Math.max(1, Math.floor(s.max / s.pp));
+      const paintN = () => {
+        s.np = clamp(s.np, 1, top());
+        $("#n").textContent = s.np;
+        $("#nmax").textContent = `höchstens ${top()}`;
+        $("#minus").disabled = s.np <= 1; $("#plus").disabled = s.np >= top();
+        $$("#quick .chip").forEach((b) => { b.classList.toggle("on", +b.dataset.n === s.np); b.hidden = +b.dataset.n > top(); });
+        $("#ivsum").innerHTML = `= <b>${plural(total(s), "Bild", "Bilder")}</b> · ${esc(splitText(s))}`;
       };
-      $("#minus").addEventListener("click", () => setN(s.n - 1));
-      $("#plus").addEventListener("click", () => setN(s.n + 1));
+      const setN = (n) => { s.np = n; paintN(); haptic.pick(); };
+      pick($("#ivpp"), (v) => { s.pp = clamp(+v, 1, PER_MAX); paintN(); });
+      $("#minus").addEventListener("click", () => setN(s.np - 1));
+      $("#plus").addEventListener("click", () => setN(s.np + 1));
       $("#quick").addEventListener("click", (e) => { const b = e.target.closest("[data-n]"); if (b) setN(+b.dataset.n); });
-      $("#minus").disabled = s.n <= 1; $("#plus").disabled = s.n >= s.max;
+      paintN();
       setGo("Nächste Seite", () => goStep(step + 1));
     }, dir);
     return;
@@ -1227,19 +1255,19 @@ function interview(dir) {
     <p class="step-no">Übersicht</p>
     <h2>${esc(p.title)}</h2>
     <div class="rows" style="margin-top:14px"><dl class="dl">
-      <div><dt>Bilder</dt><dd>${s.n} · ${esc(VARIETY.find((v) => v.v === s.va).b)}</dd></div>
+      <div><dt>Bilder</dt><dd>${total(s)} · ${esc(splitText(s))}</dd></div>
       ${p.r ? `<div><dt>Foto</dt><dd>${plural(p.r, "Foto", "Fotos")} – wird bearbeitet</dd></div>` : `<div><dt>Format</dt><dd>${esc(s.f)} ${esc(fmt)}</dd></div>
-      ${model ? `<div><dt>Modell</dt><dd>${esc(model)}</dd></div>` : ""}`}
+      ${p.me ? '<div><dt>Du</dt><dd>👤 in jedem Bild · FLUX + dein LoRA</dd></div>' : model ? `<div><dt>Modell</dt><dd>${esc(model)}</dd></div>` : ""}`}
       <div><dt>Qualität</dt><dd>${esc((QUALITIES.find((q) => q.id === s.ql) || { n: s.ql }).n)}</dd></div>
       ${answered.map(([q, a]) => `<div><dt>${esc(q)}</dt><dd>${esc(a)}</dd></div>`).join("")}
       ${s.x.trim() ? `<div><dt>Außerdem</dt><dd>${esc(s.x)}</dd></div>` : ""}
     </dl></div>
     <p class="note" style="margin-top:14px">Ich schreibe daraus die Bildbeschreibungen und lege sofort los – die Bilder kommen in den Chat.</p></div>`, (el) => {
     wire(el);
-    setGo(`${plural(s.n, "Bild", "Bilder")} erstellen`, () => {
-      const order = { t: "answers", id: p.id, a: s.a, x: s.x, f: s.f, m: s.m, ql: s.ql, va: s.va, n: s.n };
-      if (!BOX) { send(order, `${plural(s.n, "Bild", "Bilder")} – geht los`); return; }
-      dispatch(order, { title: `💡 ${p.title} · ${plural(s.n, "Bild", "Bilder")}` });
+    setGo(`${plural(total(s), "Bild", "Bilder")} erstellen`, () => {
+      const order = answersOrder(p, s);
+      if (!BOX) { send(order, `${plural(total(s), "Bild", "Bilder")} – geht los`); return; }
+      dispatch(order, { title: `${p.me ? "👤" : "💡"} ${p.title} · ${plural(total(s), "Bild", "Bilder")}` });
       ideaDropped = true; IDEA = null; toast("Geht los – den Stand siehst du oben"); ideaHome();
     });
   }, dir);

@@ -71,6 +71,15 @@ body.lock .app { transform: scale(.94); opacity: .4; }
 .ver { color: var(--hint); font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46%; font-variant-numeric: tabular-nums; }
 .live { width: 7px; height: 7px; border-radius: 50%; background: var(--hint); opacity: .5; margin-left: auto; flex: none; }
+/* 🔖 the version: quiet when up to date, orange „Update“ when something is behind */
+.vtag { margin-left: auto; flex: none; font: inherit; font-size: 11px; color: var(--hint); padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent; font-variant-numeric: tabular-nums; cursor: pointer; }
+.vtag:empty { display: none; }
+.vtag + .live { margin-left: 0; }
+.vtag.old { color: #ffb020; border-color: rgba(255, 176, 32, .6); background: rgba(255, 176, 32, .1); font-weight: 700; }
+.vinfo { padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
+.vinfo b { font-variant-numeric: tabular-nums; }
+.vinfo .old { color: #ffb020; }
 .live.box { background: linear-gradient(90deg, var(--red), var(--cyan)); width: 9px; height: 9px; opacity: 1; animation: beat 2.6s infinite; }
 @keyframes beat { 0% { box-shadow: 0 0 0 0 var(--cyan-line); } 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
@@ -450,6 +459,7 @@ body.dock-on .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
     <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="pk-r" x1="30" y1="22" x2="76" y2="68" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff2d55"/><stop offset=".5" stop-color="#a24bff"/><stop offset="1" stop-color="#18e4d6"/></linearGradient><linearGradient id="pk-t" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1b1c23"/><stop offset="1" stop-color="#0c0d11"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(#pk-t)"/><circle cx="53" cy="44" r="15.5" fill="none" stroke="url(#pk-r)" stroke-width="13"/><rect x="26" y="24" width="14" height="54" rx="7" fill="#fff"/><circle cx="53" cy="44" r="3.8" fill="#fff"/><path d="M80 11c1 5.4 3.1 7.5 8.5 8.5-5.4 1-7.5 3.1-8.5 8.5-1-5.4-3.1-7.5-8.5-8.5 5.4-1 7.5-3.1 8.5-8.5z" fill="#18e4d6"/></svg>
     <span class="brand" data-text="PikTscha">PikTscha</span>
     <span class="ver" id="ctx">Studio</span>
+    <button class="vtag" id="vtag" type="button" aria-label="Version"></button>
     <span class="live" id="live" title="Briefkasten"></span>
   </header>
   <div class="trips" id="trips"></div>
@@ -1293,6 +1303,8 @@ function settings() {
       </div></div>
     </div></div>` : ""}
 
+    <div class="group"><div class="label">Version</div><div class="rows"><div class="vinfo" id="vinfo">${versionText()}</div></div></div>
+
     <div class="group"><div class="label">Dein Konto</div><div class="rows"><div class="stats">
       <div><b>${esc(s.max)}</b><small>Bilder pro Idee</small></div>
       <div><b>${s.limit ? esc(s.limit) : "∞"}</b><small>Aufträge pro Tag</small></div>
@@ -1534,6 +1546,54 @@ $("#viewer").addEventListener("click", (e) => { if (e.target.id === "viewer") cl
 
 if (BOX) $("#live").classList.add("box");
 paintTrips(); watchTrips();
+/* ---------- 🔖 version: this page's number (built in), the PC's (in the link) and the newest one online ---------- */
+const VERSION = (MENU && MENU.version) || "";
+let LATEST = "";      // from version.json next to the page, read past every cache
+function newer(a, b) {   // a > b for x.y.z
+  const x = String(a || "").split(".").map(Number), y = String(b || "").split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+function versionState() {
+  if (!VERSION) return "unknown";
+  if (LATEST && newer(LATEST, VERSION)) return "page";        // a newer page is online → reload
+  if (PREFS.pv && newer(PREFS.pv, VERSION)) return "coming";  // the PC is newer, its page is on the way
+  if (PREFS.pv && newer(VERSION, PREFS.pv)) return "pc";      // the PC still runs an older Bildstudio
+  return "ok";
+}
+function versionText() {
+  const st = versionState();
+  const lines = [`PikTscha <b>v${esc(VERSION || "?")}</b> · PC <b>v${esc(PREFS.pv || "?")}</b>`];
+  if (st === "page") lines.push(`<span class="old">Neue Version v${esc(LATEST)} ist da – tippe oben auf „Update“.</span>`);
+  else if (st === "coming") lines.push(`<span class="old">Der PC ist schon bei v${esc(PREFS.pv)} – die App folgt in ein paar Minuten.</span>`);
+  else if (st === "pc") lines.push(`<span class="old">Der PC läuft noch mit einer älteren Version – Bildstudio neu starten.</span>`);
+  else if (st === "ok") lines.push("✓ Alles aktuell");
+  return lines.join("<br>");
+}
+function showVersion() {
+  const tag = $("#vtag");
+  if (!VERSION) return;
+  const st = versionState();
+  tag.textContent = st === "page" || st === "coming" ? "Update" : `v${VERSION}`;
+  tag.classList.toggle("old", st !== "ok");
+  const info = $("#vinfo");
+  if (info) info.innerHTML = versionText();
+}
+function reloadFresh() {
+  const u = new URL(location.href);
+  u.searchParams.set("u", String(Date.now()));   // past Telegram's and the browser's cache
+  location.replace(u.toString());
+}
+$("#vtag").addEventListener("click", () => {
+  haptic.tap();
+  const st = versionState();
+  if (st === "page" || st === "coming") { toast("Lädt die neue Version …"); setTimeout(reloadFresh, 350); }
+  else toast(st === "pc" ? "Der PC läuft noch mit einer älteren Version" : `PikTscha v${VERSION} · alles aktuell`);
+});
+showVersion();
+fetch(`version.json?t=${Date.now()}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null))
+  .then((d) => { if (d && d.v) { LATEST = String(d.v); showVersion(); } }).catch(() => { /* offline or local */ });
+
 loadFavs(() => openTab(IDEA || location.hash.includes("idee") ? "idea" : "effects"));
 </script>
 </body>
